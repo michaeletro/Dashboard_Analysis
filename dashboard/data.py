@@ -13,6 +13,11 @@ from equity_data_frame_module import DataLoader
 from time_series_modules.StochasticPortfolioEngine import (
     StochasticPortfolioEngine,
 )
+from bond_series_modules.bond_analyzer import (
+    BondAnalyzer,
+    create_synthetic_bond_data,
+    calculate_bond_portfolio_risk,
+)
 from common.metrics import nmise_mape
 from .figures_portfolio import clear_fig_caches
 
@@ -37,6 +42,13 @@ mape_mom = None
 peer_analyzer = None
 sector_summary = None
 peer_analyzer_fig = None
+# Bond analysis globals
+bond_analyzer = None
+df_bonds = None
+bond_portfolio_risk = None
+bond_duration_stats = None
+bond_yield_curve = None
+bond_credit_analysis = None
 
 _INIT_DONE = False
 
@@ -71,6 +83,8 @@ def ensure_data_loaded() -> None:
     global results_all, r2_all, y_hat_all
     global results_mom, r2_mom, y_hat_m
     global y_actual, peer_analyzer, sector_summary, peer_analyzer_fig
+    global bond_analyzer, df_bonds, bond_portfolio_risk
+    global bond_duration_stats, bond_yield_curve, bond_credit_analysis
 
     excel_file_path = os.environ.get("DATA_XLSX", "../DBG Data Set Presentation Prep Doc.xlsx")
 
@@ -84,10 +98,16 @@ def ensure_data_loaded() -> None:
     if all_sheets is None:
         df_time_series = _make_synthetic_prices()
         df_equity = loader.create_synthetic_data(n_stocks=150, seed=123)
+        df_bonds = create_synthetic_bond_data(n_bonds=80, seed=456)
     else:
         df_time_series = list(all_sheets.values())[2].copy()
         df_time_series.set_index(df_time_series.columns[0], inplace=True)
         df_equity = all_sheets[list(all_sheets.keys())[0]].copy()
+        # Try to load bond data from second sheet, fallback to synthetic
+        try:
+            df_bonds = list(all_sheets.values())[1].copy()
+        except (IndexError, KeyError):
+            df_bonds = create_synthetic_bond_data(n_bonds=80, seed=456)
 
     # Engine and weights
     engine = StochasticPortfolioEngine(df_time_series, dt=1/252, rf=0.02, verbose=True)
@@ -154,6 +174,14 @@ def ensure_data_loaded() -> None:
     sector_summary = peer_analyzer.get_sector_summary(df_equity)
     peer_analyzer_fig = peer_analyzer.plot_sector_dispersion(df_equity)
 
+    # Bond analysis
+    bond_analyzer = BondAnalyzer(verbose=True)
+    bond_analyzer.load_data(df_bonds)
+    bond_portfolio_risk = calculate_bond_portfolio_risk(df_bonds)
+    bond_duration_stats = bond_analyzer.calculate_duration_statistics()
+    bond_yield_curve = bond_analyzer.yield_curve_analysis()
+    bond_credit_analysis = bond_analyzer.credit_analysis()
+
     _INIT_DONE = True
 
 
@@ -169,6 +197,8 @@ def reset_cache() -> None:
         "results_all","r2_all","y_hat_all","results_mom","r2_mom","y_hat_m",
         "y_actual","peer_analyzer","sector_summary","peer_analyzer_fig",
         "nmise_all","mape_all","nmise_mom","mape_mom",
+        "bond_analyzer","df_bonds","bond_portfolio_risk","bond_duration_stats",
+        "bond_yield_curve","bond_credit_analysis",
     ]:
         globals()[name] = None
     _INIT_DONE = False

@@ -27,6 +27,12 @@ from .figures_portfolio import (
     make_tangency_levels_figure,
     make_portfolio_paths_3d_figure,
 )
+from .figures_bonds import (
+    make_yield_curve_figure,
+    make_duration_distribution_figure,
+    make_credit_analysis_figure,
+    make_bond_performance_figure,
+)
 
 
 # ---------- LaTeX markdown blocks for each tab ----------
@@ -142,6 +148,62 @@ $$
 	ext{MAPE}^{(k)} = \frac{100}{T} \sum_t \left| \frac{V^{(k)}_t - V^{\text{hist}}_t}{V^{\text{hist}}_t} \right|.
 $$
 Golden run = path with smallest NMISE.
+"""
+
+bond_math_md = r"""
+**Underlying mathematics**
+
+### Duration and Convexity
+
+Modified duration measures price sensitivity to yield changes:
+$$
+D_{\text{mod}} = \frac{D}{1 + y}
+$$
+where $D$ is Macaulay duration and $y$ is yield to maturity.
+
+Price change approximation:
+$$
+\frac{\Delta P}{P} \approx -D_{\text{mod}} \cdot \Delta y + \frac{1}{2} C \cdot (\Delta y)^2
+$$
+where $C$ is convexity.
+
+### Portfolio Duration
+
+Portfolio duration as weighted average:
+$$
+D_p = \sum_{i=1}^n w_i \cdot D_i
+$$
+where $w_i$ are portfolio weights and $D_i$ individual bond durations.
+
+### Credit Risk Metrics
+
+Credit spread over risk-free rate:
+$$
+s_i = y_i - r_{\text{rf}}(T_i)
+$$
+where $y_i$ is bond yield, $r_{\text{rf}}(T_i)$ is treasury yield at maturity $T_i$.
+
+Expected loss estimation:
+$$
+\text{EL} = \text{PD} \times \text{LGD} \times \text{EAD}
+$$
+PD = Probability of Default, LGD = Loss Given Default, EAD = Exposure at Default.
+
+### Yield Curve Analysis
+
+Nelson-Siegel model for yield curve:
+$$
+y(\tau) = \beta_0 + \beta_1 \left(\frac{1 - e^{-\lambda \tau}}{\lambda \tau}\right) + \beta_2 \left(\frac{1 - e^{-\lambda \tau}}{\lambda \tau} - e^{-\lambda \tau}\right)
+$$
+where $\tau$ is time to maturity and $\beta_0, \beta_1, \beta_2, \lambda$ are parameters.
+
+### Performance Attribution
+
+Return decomposition:
+$$
+R_p = \sum_i w_i R_i = \sum_i w_i (\text{Duration Effect}_i + \text{Credit Effect}_i + \text{Selection Effect}_i)
+$$
+Duration effect captures interest rate risk, credit effect captures spread changes.
 """
 
 cross_section_math_md = r"""
@@ -917,6 +979,151 @@ def layout_tab_other():
     )
 
 
+# ---------- Bond analysis tab ----------
+
+def layout_tab_bonds():
+    """Bond portfolio analysis tab with fixed income analytics."""
+    # Math explainer at top
+    math_block = card(
+        title="Underlying mathematics",
+        children=dcc.Markdown(
+            bond_math_md,
+            mathjax=True,
+            style={
+                "fontSize": "12px",
+                "color": THEME["muted"],
+                "whiteSpace": "pre-wrap",
+            },
+        ),
+    )
+
+    # Portfolio summary stats
+    if data.is_ready():
+        portfolio_risk = data.bond_portfolio_risk
+        duration_stats = data.bond_duration_stats
+        
+        summary_text = [
+            f"Portfolio Duration: {portfolio_risk['portfolio_duration']:.2f}",
+            f"Portfolio Yield: {portfolio_risk['portfolio_yield']*100:.2f}%",
+            f"Number of Bonds: {portfolio_risk['number_of_bonds']}",
+            f"Total Face Value: ${portfolio_risk['total_face_value']/1e6:.1f}M",
+        ]
+        summary_joined = " | ".join(summary_text)
+    else:
+        summary_joined = "Loading bond data..."
+
+    # Row 1: Yield curve and duration analysis
+    row1 = html.Div(
+        style={"display": "flex", "gap": "24px", "height": "500px"},
+        children=[
+            html.Div(
+                style={"flex": "1", "height": "100%"},
+                children=[
+                    card(
+                        title="Yield Curve Analysis",
+                        children=[
+                            dcc.Graph(
+                                id="yield-curve-graph",
+                                figure=make_yield_curve_figure(),
+                                config=GRAPH_CONFIG,
+                                style={"flex": "1 1 auto", "height": "100%", "width": "100%"},
+                            ),
+                        ],
+                    )
+                ],
+            ),
+            html.Div(
+                style={"flex": "1", "height": "100%"},
+                children=[
+                    card(
+                        title="Duration Risk Analysis",
+                        children=[
+                            dcc.Graph(
+                                id="duration-graph",
+                                figure=make_duration_distribution_figure(),
+                                style={"flex": "1 1 auto", "height": "100%", "width": "100%"},
+                                config=GRAPH_CONFIG,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+        ],
+    )
+
+    # Row 2: Credit analysis and performance
+    row2 = html.Div(
+        style={"display": "flex", "gap": "24px"},
+        children=[
+            html.Div(
+                style={"flex": "1"},
+                children=[
+                    card(
+                        title="Credit Quality Analysis",
+                        children=[
+                            dcc.Graph(
+                                id="credit-analysis-graph",
+                                figure=make_credit_analysis_figure(),
+                                style={"height": "600px", "width": "100%"},
+                                config=GRAPH_CONFIG,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+        ],
+    )
+
+    # Row 3: Performance analysis
+    row3 = html.Div(
+        style={"display": "flex", "gap": "24px"},
+        children=[
+            html.Div(
+                style={"flex": "1"},
+                children=[
+                    card(
+                        title="Performance Attribution",
+                        children=[
+                            html.Div(
+                                summary_joined,
+                                style={
+                                    "color": THEME["muted"],
+                                    "fontSize": "11px",
+                                    "marginBottom": "8px",
+                                },
+                            ),
+                            dcc.Graph(
+                                id="bond-performance-graph",
+                                figure=make_bond_performance_figure(),
+                                style={"height": "450px", "width": "100%"},
+                                config=GRAPH_CONFIG,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+        ],
+    )
+
+    return html.Div(
+        style={"display": "flex", "flexDirection": "column", "gap": "18px"},
+        children=[
+            html.Div(
+                "Fixed income portfolio analysis",
+                style={
+                    "color": THEME["muted"],
+                    "marginBottom": "4px",
+                    "fontSize": "14px",
+                },
+            ),
+            math_block,
+            row1,
+            row2,
+            row3,
+        ],
+    )
+
+
 # ---------- Root layout and index_string ----------
 
 def create_root_layout():
@@ -1055,6 +1262,12 @@ def create_root_layout():
                     dcc.Tab(
                         label="EQ Dataframe analysis",
                         value="tab-other",
+                        className="custom-tab",
+                        selected_className="custom-tab--selected",
+                    ),
+                    dcc.Tab(
+                        label="Bond analysis",
+                        value="tab-bonds",
                         className="custom-tab",
                         selected_className="custom-tab--selected",
                     ),

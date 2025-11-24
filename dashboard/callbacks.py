@@ -16,7 +16,7 @@ from .config import (
     SIM_MAXPATHS_MAX,
     get_runtime_settings,
 )
-from .layouts import layout_tab_portfolio, layout_tab_other
+from .layouts import layout_tab_portfolio, layout_tab_other, layout_tab_bonds
 from .figures_portfolio import (
     make_frontier_figure,
     make_paths_figure,
@@ -35,6 +35,8 @@ def render_tab(tab_value):
         return layout_tab_portfolio()
     if tab_value == "tab-other":
         return layout_tab_other()
+    if tab_value == "tab-bonds":
+        return layout_tab_bonds()
     return html.Div("Unknown tab")
 
 
