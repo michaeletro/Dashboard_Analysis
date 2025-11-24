@@ -12,8 +12,8 @@ from equity_data_frame_module import DataLoader
 
 from time_series_modules.StochasticPortfolioEngine import (
     StochasticPortfolioEngine,
-    nmise_mape,
 )
+from common.metrics import nmise_mape
 
 # ---------------------------------------------------------------------
 # Load data from Excel
