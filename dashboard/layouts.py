@@ -4,26 +4,13 @@ from dash import dcc, html
 
 from .config import (
     THEME,
-    APP_TITLE,
     GRAPH_CONFIG,
-    CARD_PADDING,
-    CARD_MIN_HEIGHT,
-    FRONTIER_MIN,
-    FRONTIER_MAX,
-    FRONTIER_STEP,
-    FRONTIER_DEFAULT,
-    SIM_STEPS_MIN,
-    SIM_STEPS_MAX,
-    SIM_STEPS_STEP,
-    SIM_STEPS_DEFAULT,
-    SIM_NPATHS_MIN,
-    SIM_NPATHS_MAX,
-    SIM_NPATHS_STEP,
-    SIM_NPATHS_DEFAULT,
-    SIM_MAXPATHS_MIN,
-    SIM_MAXPATHS_MAX,
-    SIM_MAXPATHS_STEP,
-    SIM_MAXPATHS_DEFAULT,
+    get_runtime_settings,
+)
+from .config import (
+    THEME,
+    GRAPH_CONFIG,
+    get_runtime_settings,
 )
 from . import data
 
@@ -47,7 +34,7 @@ from .figures_portfolio import (
 portfolio_math_md = r"""
 **Underlying mathematics**
 
-**Return and risk estimation**
+### Return and risk estimation
 
 Let $r_t \in \mathbb{R}^n$ be the vector of asset log returns at time $t$.
 
@@ -63,169 +50,98 @@ $$
 
 Annualisation uses
 $$
-\mu_{\text{ann}} = \frac{\hat{\mu}}{\Delta t},
-\qquad
+\mu_{\text{ann}} = \frac{\hat{\mu}}{\Delta t}, \qquad
 \Sigma_{\text{ann}} = \frac{\hat{\Sigma}}{\Delta t},
 $$
-where $\Delta t$ is the length of one return step (for example $1/252$ for daily data).
+where $\Delta t$ is the length of one return step (e.g. $1/252$ for daily data).
 
 ---
 
-**Calibration of GBM parameters**
+### Calibration of GBM parameters
 
-For each asset price $S_t$, define log prices $X_t = \log S_t$ and log increments
+For each asset price $S_t$, define log price $X_t = \log S_t$ and increment
 $$
 \Delta X_t = X_{t+\Delta t} - X_t.
 $$
-
-Under a geometric Brownian motion,
+Under GBM,
 $$
 \Delta X_t \sim \mathcal{N}\bigl( (\mu - \tfrac{1}{2}\sigma^2)\Delta t,\; \sigma^2 \Delta t \bigr).
 $$
 
-From historical data we compute the sample mean $m$ and variance $v$ of $\Delta X_t$:
+Compute sample mean $m$ and variance $v$ of $\Delta X_t$:
 $$
-m = \frac{1}{T} \sum_{t=1}^{T} \Delta X_t,
-\qquad
+m = \frac{1}{T} \sum_{t=1}^{T} \Delta X_t, \qquad
 v = \frac{1}{T - 1} \sum_{t=1}^{T} (\Delta X_t - m)^2.
 $$
-
-The maximum likelihood estimators are
+MLE estimators:
 $$
-\hat{\sigma}^2 = \frac{v}{\Delta t},
-\qquad
+\hat{\sigma}^2 = \frac{v}{\Delta t}, \qquad
 \hat{\mu} = \frac{m}{\Delta t} + \frac{1}{2}\hat{\sigma}^2.
 $$
 
-In the multivariate case, let $\Delta X_t \in \mathbb{R}^n$ be the vector of log increments:
-
-* Sample mean vector $m \in \mathbb{R}^n$  
-* Sample covariance matrix $C \in \mathbb{R}^{n \times n}$
-
-Then the GBM covariance for log prices is
+Multivariate case: $\Delta X_t \in \mathbb{R}^n$ with mean vector $m$ and covariance $C$.
 $$
-\hat{\Sigma}_{\log} = \frac{C}{\Delta t},
-$$
-and elementwise drift for each asset $i$ is
-$$
-\hat{\mu}_{\log,i} = \frac{m_i}{\Delta t},
-\qquad
+\hat{\Sigma}_{\log} = \frac{C}{\Delta t}, \qquad
+\hat{\mu}_{\log,i} = \frac{m_i}{\Delta t}, \qquad
 \hat{\mu}_i = \hat{\mu}_{\log,i} + \tfrac{1}{2}\hat{\Sigma}_{\log,ii}.
 $$
 
-These calibrated $\hat{\mu}$ and $\hat{\Sigma}$ are exactly what the engine uses as inputs for the Markowitz frontier and GBM simulations.
+---
+
+### Correlated shocks
+Cholesky (or other) factorisation:
+$$
+\hat{\Sigma}_{\log} = L L^{\top}, \quad L \text{ lower triangular}.
+$$
+Simulate step:
+1. Draw $Z_t \sim \mathcal{N}(0, I_n)$.
+2. Set $\varepsilon_t = L Z_t$.
 
 ---
 
-**Correlation and simulation of shocks**
-
-From the covariance matrix $\hat{\Sigma}_{\log}$ we obtain a Cholesky factor $L$:
+### Markowitz frontier
+Portfolio weights $w$ give expected return and volatility:
 $$
-\hat{\Sigma}_{\log} = L L^{\top},
-\quad
-L \text{ lower triangular}.
+\mu_p = w^{\top} \mu, \qquad \sigma_p = \sqrt{w^{\top} \Sigma w}.
 $$
-
-To simulate correlated shocks at each step:
-
-1. Draw $Z_t \sim \mathcal{N}(0, I_n)$ (independent components)  
-2. Set correlated shocks $\varepsilon_t = L Z_t$  
-
-The GBM step is then applied componentwise using these correlated shocks.
-
----
-
-**Markowitz frontier**
-
-For a portfolio with weights $w$:
-
-Expected return:
+Frontier solves
 $$
-\mu_p = w^{\top} \mu
+\min_w \; w^{\top} \Sigma w \quad \text{s.t.} \quad w^{\top} \mu = \mu^\*,\; \mathbf{1}^{\top} w = 1.
 $$
 
-Volatility:
+### Tangency (max Sharpe) portfolio
+With risk free rate $r_f$:
 $$
-\sigma_p = \sqrt{w^{\top} \Sigma w}
-$$
-
-The efficient frontier solves
-$$
-\min_w \; w^{\top} \Sigma w
-\quad \text{s.t.} \quad
-w^{\top} \mu = \mu^\*, \; \mathbf{1}^{\top} w = 1
-$$
-
-for different targets $\mu^\*$.
-
----
-
-**Tangency portfolio (max Sharpe)**
-
-With risk free rate $r_f$ and ones vector $\mathbf{1}$,
-$$
-w^\* \propto \Sigma^{-1}(\mu - r_f \mathbf{1}),
-\qquad
 w^\* = \frac{\Sigma^{-1}(\mu - r_f \mathbf{1})}{\mathbf{1}^{\top} \Sigma^{-1}(\mu - r_f \mathbf{1})}.
 $$
 
-This $w^\*$ is the tangency portfolio used for both the frontier highlight and the GBM portfolio simulations.
+---
+
+### GBM simulation
+Single asset discretisation:
+$$
+S_{t+\Delta t} = S_t \exp\Big((\mu - \tfrac{1}{2}\sigma^2)\Delta t + \sigma \sqrt{\Delta t}\, Z_t\Big),\quad Z_t \sim \mathcal{N}(0,1).
+$$
+Portfolio value:
+$$
+V_t = w^{\top} S_t.
+$$
 
 ---
 
-**GBM simulation of asset and portfolio paths**
+### Historical vs simulated tangency levels
+Normalise simulated paths $\tilde V^{(k)}_t$ to actual starting level: $V^{(k)}_t = V^{\text{hist}}_0 \tilde V^{(k)}_t$ and compare distribution with historical $V^{\text{hist}}_t$.
 
-Each asset follows the discretised GBM
+### Golden run fit metrics
+Normalised MISE:
 $$
-S_{t+\Delta t} = S_t \exp\Big(
-(\mu - \tfrac{1}{2} \sigma^2)\Delta t + \sigma \sqrt{\Delta t}\, Z_t
-\Big),
-\quad Z_t \sim \mathcal{N}(0, 1),
+	ext{NMISE}^{(k)} = \frac{\sum_t ( V^{(k)}_t - V^{\text{hist}}_t )^2}{\sum_t ( V^{\text{hist}}_t - \bar V^{\text{hist}} )^2}, \qquad \bar V^{\text{hist}} = \frac{1}{T}\sum_t V^{\text{hist}}_t.
 $$
-or in the multivariate case using correlated $\varepsilon_t$ as described above.
-
-Portfolio value at each step is
+MAPE:
 $$
-V_t = w^{\top} S_t,
+	ext{MAPE}^{(k)} = \frac{100}{T} \sum_t \left| \frac{V^{(k)}_t - V^{\text{hist}}_t}{V^{\text{hist}}_t} \right|.
 $$
-and in the simulation engine paths are often normalised by $V_0$ so that $V_0 = 1$.
-
----
-
-**Historical vs simulated tangency levels**
-
-1. Compute realised tangency portfolio level $V^{\text{hist}}_t$ from actual prices  
-2. Simulate normalised paths $\tilde V^{(k)}_t$ under GBM  
-3. Map to level space with starting level $V^{\text{hist}}_0$ via  
-   $V^{(k)}_t = V^{\text{hist}}_0 \tilde V^{(k)}_t$  
-
-The simulated distribution, mean path, and a “golden run” path are then compared with $V^{\text{hist}}_t$.
-
----
-
-**Golden run fit metrics (NMISE and MAPE)**
-
-For a given simulated path $V^{(k)}_t$ and realised path $V^{\text{hist}}_t$:
-
-Normalised mean integrated squared error:
-$$
-\text{NMISE}^{(k)} =
-\frac{\sum_{t} \bigl( V^{(k)}_t - V^{\text{hist}}_t \bigr)^2}
-     {\sum_{t} \bigl( V^{\text{hist}}_t - \bar{V}^{\text{hist}} \bigr)^2},
-\quad
-\bar{V}^{\text{hist}} = \frac{1}{T} \sum_{t} V^{\text{hist}}_t.
-$$
-
-Mean absolute percent error:
-$$
-\text{MAPE}^{(k)} =
-\frac{100}{T} \sum_{t}
-\left\lvert
-\frac{V^{(k)}_t - V^{\text{hist}}_t}{V^{\text{hist}}_t}
-\right\rvert.
-$$
-
-The “golden run” highlighted in the plot is the path $k$ that minimises $\text{NMISE}^{(k)}$ among all simulated paths.
+Golden run = path with smallest NMISE.
 """
 
 cross_section_math_md = r"""
@@ -392,13 +308,14 @@ def card(children, title=None):
     if header is not None:
         flat_children = [header] + flat_children
 
+    _settings = get_runtime_settings()
     return html.Div(
         style={
             "backgroundColor": THEME["card"],
             "border": f"1px solid {THEME['border']}",
             "borderRadius": "4px",
-            "padding": CARD_PADDING,
-            "minHeight": CARD_MIN_HEIGHT,
+            "padding": _settings["CARD"]["padding"],
+            "minHeight": _settings["CARD"]["min_height"],
             "boxShadow": "0 0 10px rgba(0, 0, 0, 0.6)",
             "display": "flex",
             "flexDirection": "column",
@@ -411,6 +328,7 @@ def card(children, title=None):
 
 def layout_tab_portfolio():
     # maths explainer at top of portfolio tab
+    settings = get_runtime_settings()
     math_card = card(
         children=dcc.Markdown(
             portfolio_math_md,
@@ -447,16 +365,16 @@ def layout_tab_portfolio():
                                     ),
                                     dcc.Slider(
                                         id="frontier-npoints",
-                                        min=FRONTIER_MIN,
-                                        max=FRONTIER_MAX,
-                                        step=FRONTIER_STEP,
-                                        value=FRONTIER_DEFAULT,
+                                        min=settings["FRONTIER"]["min"],
+                                        max=settings["FRONTIER"]["max"],
+                                        step=settings["FRONTIER"]["step"],
+                                        value=settings["FRONTIER"]["default"],
                                         marks={
-                                            FRONTIER_MIN: str(FRONTIER_MIN),
+                                            settings["FRONTIER"]["min"]: str(settings["FRONTIER"]["min"]),
                                             50: "50",
                                             100: "100",
                                             150: "150",
-                                            FRONTIER_MAX: str(FRONTIER_MAX),
+                                            settings["FRONTIER"]["max"]: str(settings["FRONTIER"]["max"]),
                                         },
                                         tooltip={"placement": "bottom"},
                                     ),
@@ -481,7 +399,7 @@ def layout_tab_portfolio():
                                 children=dcc.Graph(
                                     id="frontier-graph",
                                     figure=make_frontier_figure(
-                                        n_points=FRONTIER_DEFAULT,
+                                        n_points=settings["FRONTIER"]["default"],
                                         show_tangency=True,
                                     ),
                                     style={"height": "460px", "width": "100%"},
@@ -506,15 +424,15 @@ def layout_tab_portfolio():
                                     ),
                                     dcc.Slider(
                                         id="sim-nsteps",
-                                        min=SIM_STEPS_MIN,
-                                        max=SIM_STEPS_MAX,
-                                        step=SIM_STEPS_STEP,
-                                        value=SIM_STEPS_DEFAULT,
+                                        min=settings["SIM_STEPS"]["min"],
+                                        max=settings["SIM_STEPS"]["max"],
+                                        step=settings["SIM_STEPS"]["step"],
+                                        value=settings["SIM_STEPS"]["default"],
                                         marks={
-                                            SIM_STEPS_MIN: str(SIM_STEPS_MIN),
+                                            settings["SIM_STEPS"]["min"]: str(settings["SIM_STEPS"]["min"]),
                                             100: "100",
                                             252: "252",
-                                            SIM_STEPS_MAX: str(SIM_STEPS_MAX),
+                                            settings["SIM_STEPS"]["max"]: str(settings["SIM_STEPS"]["max"]),
                                         },
                                         tooltip={"placement": "bottom"},
                                     ),
@@ -525,15 +443,15 @@ def layout_tab_portfolio():
                                     ),
                                     dcc.Slider(
                                         id="sim-npaths",
-                                        min=SIM_NPATHS_MIN,
-                                        max=SIM_NPATHS_MAX,
-                                        step=SIM_NPATHS_STEP,
-                                        value=SIM_NPATHS_DEFAULT,
+                                        min=settings["SIM_NPATHS"]["min"],
+                                        max=settings["SIM_NPATHS"]["max"],
+                                        step=settings["SIM_NPATHS"]["step"],
+                                        value=settings["SIM_NPATHS"]["default"],
                                         marks={
-                                            SIM_NPATHS_MIN: str(SIM_NPATHS_MIN),
+                                            settings["SIM_NPATHS"]["min"]: str(settings["SIM_NPATHS"]["min"]),
                                             100: "100",
                                             500: "500",
-                                            SIM_NPATHS_MAX: str(SIM_NPATHS_MAX),
+                                            settings["SIM_NPATHS"]["max"]: str(settings["SIM_NPATHS"]["max"]),
                                         },
                                         tooltip={"placement": "bottom"},
                                     ),
@@ -544,15 +462,15 @@ def layout_tab_portfolio():
                                     ),
                                     dcc.Slider(
                                         id="sim-maxpaths",
-                                        min=SIM_MAXPATHS_MIN,
-                                        max=SIM_MAXPATHS_MAX,
-                                        step=SIM_MAXPATHS_STEP,
-                                        value=SIM_MAXPATHS_DEFAULT,
+                                        min=settings["SIM_MAXPATHS"]["min"],
+                                        max=settings["SIM_MAXPATHS"]["max"],
+                                        step=settings["SIM_MAXPATHS"]["step"],
+                                        value=settings["SIM_MAXPATHS"]["default"],
                                         marks={
-                                            SIM_MAXPATHS_MIN: str(SIM_MAXPATHS_MIN),
+                                            settings["SIM_MAXPATHS"]["min"]: str(settings["SIM_MAXPATHS"]["min"]),
                                             50: "50",
                                             100: "100",
-                                            SIM_MAXPATHS_MAX: str(SIM_MAXPATHS_MAX),
+                                            settings["SIM_MAXPATHS"]["max"]: str(settings["SIM_MAXPATHS"]["max"]),
                                         },
                                         tooltip={"placement": "bottom"},
                                     ),
@@ -596,10 +514,10 @@ def layout_tab_portfolio():
                                 children=dcc.Graph(
                                     id="sim-graph",
                                     figure=make_paths_figure(
-                                        n_steps=SIM_STEPS_DEFAULT,
-                                        n_paths=SIM_NPATHS_DEFAULT,
+                                        n_steps=settings["SIM_STEPS"]["default"],
+                                        n_paths=settings["SIM_NPATHS"]["default"],
                                         use_tangency=True,
-                                        max_paths=SIM_MAXPATHS_DEFAULT,
+                                        max_paths=settings["SIM_MAXPATHS"]["default"],
                                     ),
                                     style={"height": "460px", "width": "100%"},
                                     config=GRAPH_CONFIG,
@@ -701,15 +619,15 @@ def layout_tab_portfolio():
                                     ),
                                     dcc.Slider(
                                         id="portfolio-3d-nsteps",
-                                        min=SIM_STEPS_MIN,
-                                        max=SIM_STEPS_MAX,
-                                        step=SIM_STEPS_STEP,
+                                        min=settings["SIM_STEPS"]["min"],
+                                        max=settings["SIM_STEPS"]["max"],
+                                        step=settings["SIM_STEPS"]["step"],
                                         value=252,
                                         marks={
-                                            SIM_STEPS_MIN: str(SIM_STEPS_MIN),
+                                            settings["SIM_STEPS"]["min"]: str(settings["SIM_STEPS"]["min"]),
                                             126: "126",
                                             252: "252",
-                                            SIM_STEPS_MAX: str(SIM_STEPS_MAX),
+                                            settings["SIM_STEPS"]["max"]: str(settings["SIM_STEPS"]["max"]),
                                         },
                                         tooltip={"placement": "bottom"},
                                     ),
@@ -1002,6 +920,7 @@ def layout_tab_other():
 # ---------- Root layout and index_string ----------
 
 def create_root_layout():
+    _settings = get_runtime_settings()
     return html.Div(
         style={
             "fontFamily": "Arial",
@@ -1017,7 +936,7 @@ def create_root_layout():
         },
         children=[
             html.Div(
-                APP_TITLE,
+                _settings["APP_TITLE"],
                 style={
                     "fontSize": "22px",
                     "fontWeight": "bold",
@@ -1068,12 +987,13 @@ def create_root_layout():
     )
 
 
+_app_title = get_runtime_settings()["APP_TITLE"]
 index_string = """
 <!DOCTYPE html>
 <html>
     <head>
         {%metas%}
-        <title>""" + APP_TITLE + """</title>
+        <title>""" + _app_title + """</title>
         {%favicon%}
         {%css%}
         <script>
