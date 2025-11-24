@@ -92,10 +92,10 @@ def make_yield_curve_figure() -> go.Figure:
         )
     )
     
-    # Add fitted yield curve if we have sufficient data
+        # Add fitted yield curve if we have sufficient data
     if len(df_bonds) > 5:
         try:
-            # Fit polynomial to actual bond data
+            # Fit curve to actual bond data
             maturities_for_fit = np.asarray(df_bonds[maturity_col].values, dtype=float)
             yields_for_fit = np.asarray(df_bonds[yield_col].values, dtype=float) * 100  # Convert to %
             
@@ -105,12 +105,28 @@ def make_yield_curve_figure() -> go.Figure:
                 mat_clean = maturities_for_fit[valid_mask]
                 yield_clean = yields_for_fit[valid_mask]
                 
-                # Fit quadratic polynomial to the data
-                coeffs = np.polyfit(mat_clean, yield_clean, min(2, len(mat_clean)-1))
-                
-                # Generate smooth curve
-                maturities_smooth = np.linspace(mat_clean.min(), mat_clean.max(), 100)
-                fitted_curve = np.polyval(coeffs, maturities_smooth)
+                # Try Nelson-Siegel approximation first, fall back to polynomial
+                try:
+                    # Simple Nelson-Siegel approximation without optimization
+                    beta0 = yield_clean[mat_clean > 10].mean() if (mat_clean > 10).any() else yield_clean.mean()
+                    beta1 = yield_clean[mat_clean < 2].mean() - beta0 if (mat_clean < 2).any() else 0
+                    beta2 = 0  # Simplified
+                    lam = 1.0  # Fixed decay parameter
+                    
+                    # Generate smooth curve
+                    maturities_smooth = np.linspace(mat_clean.min(), mat_clean.max(), 100)
+                    exp_term = np.exp(-lam * maturities_smooth)
+                    factor1 = (1 - exp_term) / (lam * maturities_smooth + 1e-6)  # Avoid division by zero
+                    factor2 = factor1 - exp_term
+                    fitted_curve = beta0 + beta1 * factor1 + beta2 * factor2
+                    
+                    curve_name = 'Nelson-Siegel Fit'
+                except:
+                    # Fallback to polynomial fit
+                    coeffs = np.polyfit(mat_clean, yield_clean, min(2, len(mat_clean)-1))
+                    maturities_smooth = np.linspace(mat_clean.min(), mat_clean.max(), 100)
+                    fitted_curve = np.polyval(coeffs, maturities_smooth)
+                    curve_name = 'Polynomial Fit'
                 
                 fig.add_trace(
                     go.Scatter(
@@ -118,8 +134,8 @@ def make_yield_curve_figure() -> go.Figure:
                         y=fitted_curve,
                         mode='lines',
                         line=dict(color=THEME['accent'], width=3, dash='dash'),
-                        name='Fitted Curve',
-                        hovertemplate='Maturity: %{x:.1f}Y<br>Fitted Yield: %{y:.2f}%<extra></extra>'
+                        name=curve_name,
+                        hovertemplate=f'Maturity: %{{x:.1f}}Y<br>{curve_name}: %{{y:.2f}}%<extra></extra>'
                     )
                 )
         except Exception as e:

@@ -191,11 +191,27 @@ PD = Probability of Default, LGD = Loss Given Default, EAD = Exposure at Default
 
 ### Yield Curve Analysis
 
-Nelson-Siegel model for yield curve:
+**Nelson-Siegel yield curve model:**
 $$
-y(\tau) = \beta_0 + \beta_1 \left(\frac{1 - e^{-\lambda \tau}}{\lambda \tau}\right) + \beta_2 \left(\frac{1 - e^{-\lambda \tau}}{\lambda \tau} - e^{-\lambda \tau}\right)
+y(m) = \beta_0 + \beta_1 \left(\frac{1 - e^{-\lambda m}}{\lambda m}\right) + \beta_2 \left(\frac{1 - e^{-\lambda m}}{\lambda m} - e^{-\lambda m}\right)
 $$
-where $\tau$ is time to maturity and $\beta_0, \beta_1, \beta_2, \lambda$ are parameters.
+
+Where:
+- $y(m)$ = yield at maturity $m$
+- $\beta_0$ = long-run level (level factor)
+- $\beta_1$ = short-term factor (slope factor) 
+- $\beta_2$ = medium-term factor (curvature factor)
+- $\lambda$ = decay rate parameter (controls curvature)
+
+**Economic interpretation:**
+- As $m \to \infty$: $y(\infty) = \beta_0$ (long-term rate)
+- As $m \to 0$: $y(0) = \beta_0 + \beta_1$ (short-term rate)
+- $\beta_2$ controls the hump/trough in the yield curve
+
+**Svensson extension (4-factor):**
+$$
+y(m) = \beta_0 + \beta_1 \frac{1 - e^{-\lambda_1 m}}{\lambda_1 m} + \beta_2 \left(\frac{1 - e^{-\lambda_1 m}}{\lambda_1 m} - e^{-\lambda_1 m}\right) + \beta_3 \left(\frac{1 - e^{-\lambda_2 m}}{\lambda_2 m} - e^{-\lambda_2 m}\right)
+$$
 
 ### Performance Attribution
 

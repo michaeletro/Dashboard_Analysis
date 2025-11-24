@@ -25,8 +25,8 @@ class BondAnalyzer:
         if self.bonds_data is None:
             raise ValueError("No bond data loaded")
         
-        duration = self.bonds_data['Duration'].values
-        weights = self.bonds_data['Weight'].values if 'Weight' in self.bonds_data.columns else np.ones(len(duration)) / len(duration)
+        duration = np.asarray(self.bonds_data['Duration'].values, dtype=float)
+        weights = np.asarray(self.bonds_data['Weight'].values, dtype=float) if 'Weight' in self.bonds_data.columns else np.ones(len(duration)) / len(duration)
         
         portfolio_duration = np.average(duration, weights=weights)
         duration_variance = np.average((duration - portfolio_duration)**2, weights=weights)
@@ -34,9 +34,9 @@ class BondAnalyzer:
         return {
             'portfolio_duration': portfolio_duration,
             'duration_std': np.sqrt(duration_variance),
-            'min_duration': duration.min(),
-            'max_duration': duration.max(),
-            'avg_duration': duration.mean()
+            'min_duration': float(np.min(duration)),
+            'max_duration': float(np.max(duration)),
+            'avg_duration': float(np.mean(duration))
         }
     
     def yield_curve_analysis(self) -> pd.DataFrame:
