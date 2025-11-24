@@ -22,6 +22,7 @@ from .figures_portfolio import (
     make_paths_figure,
     make_tangency_levels_figure,
     make_portfolio_paths_3d_figure,
+    clear_fig_caches,
 )
 
 
@@ -47,6 +48,21 @@ def update_frontier(n_points, show_tangency_values):
     show_tan = "show" in (show_tangency_values or [])
     fig = make_frontier_figure(n_points=n_points, show_tangency=show_tan)
     return fig
+
+
+@app.callback(
+    Output("clear-caches-status", "children"),
+    Input("clear-caches", "n_clicks"),
+    prevent_initial_call=True,
+)
+def clear_caches(n_clicks):
+    if not n_clicks:
+        return ""
+    try:
+        clear_fig_caches()
+        return "Figure caches cleared."
+    except Exception as e:
+        return f"Cache clear failed: {e}"
 
 
 @app.callback(

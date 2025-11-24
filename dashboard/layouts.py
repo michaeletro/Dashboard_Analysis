@@ -1006,6 +1006,23 @@ def create_root_layout():
                             "fontWeight": "bold",
                         },
                     ),
+                    html.Button(
+                        "Clear caches",
+                        id="clear-caches",
+                        n_clicks=0,
+                        style={
+                            "backgroundColor": THEME["accent"],
+                            "color": "#000",
+                            "border": "none",
+                            "padding": "4px 10px",
+                            "cursor": "pointer",
+                            "fontWeight": "bold",
+                        },
+                    ),
+                    html.Div(
+                        id="clear-caches-status",
+                        style={"color": THEME["muted"], "fontSize": "11px", "alignSelf": "center"},
+                    ),
                     html.Div(
                         "Environment + runtime configuration (view only)",
                         style={"color": THEME["muted"], "fontSize": "12px", "alignSelf": "center"},

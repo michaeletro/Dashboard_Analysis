@@ -3,10 +3,12 @@ from __future__ import annotations
 import numpy as np
 import plotly.graph_objects as go
 
+from functools import lru_cache
 from .config import THEME, style_figure
 from . import data
 
 
+@lru_cache(maxsize=128)
 def make_frontier_figure(n_points: int, show_tangency: bool) -> go.Figure:
     """
     Efficient frontier in annualised space, with optional tangency point.
@@ -98,6 +100,7 @@ def make_frontier_figure(n_points: int, show_tangency: bool) -> go.Figure:
     return fig
 
 
+@lru_cache(maxsize=64)
 def make_paths_figure(
     n_steps: int,
     n_paths: int,
@@ -175,6 +178,7 @@ def make_paths_figure(
     return fig
 
 
+@lru_cache(maxsize=32)
 def make_tangency_levels_figure(
     n_paths: int = 500,
     max_paths_plot: int = 50,
@@ -249,6 +253,7 @@ def make_tangency_levels_figure(
     )
 
     return fig
+@lru_cache(maxsize=64)
 def make_portfolio_paths_3d_figure(
     port_type: str,
     n_steps: int,
@@ -353,3 +358,11 @@ def make_portfolio_paths_3d_figure(
     )
 
     return fig
+
+
+def clear_fig_caches() -> None:
+    """Clear cached figure results (used after data reset)."""
+    make_frontier_figure.cache_clear()
+    make_paths_figure.cache_clear()
+    make_tangency_levels_figure.cache_clear()
+    make_portfolio_paths_3d_figure.cache_clear()

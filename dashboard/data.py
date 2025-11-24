@@ -14,6 +14,7 @@ from time_series_modules.StochasticPortfolioEngine import (
     StochasticPortfolioEngine,
 )
 from common.metrics import nmise_mape
+from .figures_portfolio import clear_fig_caches
 
 # Public module attributes (populated lazily)
 engine = None
@@ -171,3 +172,9 @@ def reset_cache() -> None:
     ]:
         globals()[name] = None
     _INIT_DONE = False
+    # also clear any cached figures
+     # (avoid stale visuals referencing old data objects)
+    try:
+        clear_fig_caches()
+    except Exception as _e:
+        print(f"Warning: could not clear figure caches: {_e}")
