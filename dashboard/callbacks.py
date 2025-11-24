@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import plotly.graph_objects as go
 from dash import Input, Output, State, html
+import json
 
 from .app_instance import app
 from .config import (
@@ -13,6 +14,7 @@ from .config import (
     SIM_NPATHS_MAX,
     SIM_MAXPATHS_MIN,
     SIM_MAXPATHS_MAX,
+    get_runtime_settings,
 )
 from .layouts import layout_tab_portfolio, layout_tab_other
 from .figures_portfolio import (
@@ -107,3 +109,45 @@ def update_portfolio_3d(n_clicks, port_type, n_steps, n_paths, max_paths):
         max_paths=max_paths,
     )
     return fig
+
+
+# Settings panel callbacks
+
+
+@app.callback(
+    Output("settings-container", "style"),
+    Input("settings-toggle", "n_clicks"),
+    State("settings-container", "style"),
+)
+def toggle_settings(n_clicks, current_style):
+    if current_style is None:
+        current_style = {"display": "none"}
+    # First click shows, subsequent toggles flip
+    if not n_clicks:
+        return current_style
+    display = current_style.get("display", "none")
+    new_display = "none" if display != "none" else "block"
+    # Preserve other style keys
+    updated = dict(current_style)
+    updated["display"] = new_display
+    return updated
+
+
+@app.callback(
+    Output("settings-json", "children"),
+    Input("settings-refresh", "n_clicks"),
+    prevent_initial_call=True,
+)
+def refresh_settings(_):
+    settings = get_runtime_settings()
+    # Remove potential large nested objects, keep scalar meta only
+    compact = {
+        "APP_TITLE": settings["APP_TITLE"],
+        "THEME": settings["THEME"],
+        "FRONTIER": settings["FRONTIER"],
+        "SIM_STEPS": settings["SIM_STEPS"],
+        "SIM_NPATHS": settings["SIM_NPATHS"],
+        "SIM_MAXPATHS": settings["SIM_MAXPATHS"],
+        "CARD": settings["CARD"],
+    }
+    return json.dumps(compact, indent=2)

@@ -921,6 +921,52 @@ def layout_tab_other():
 
 def create_root_layout():
     _settings = get_runtime_settings()
+    # Settings panel (collapsible) components
+    settings_panel = html.Div(
+        id="settings-container",
+        style={
+            "display": "none",
+            "backgroundColor": THEME["card"],
+            "border": f"1px solid {THEME['border']}",
+            "borderRadius": "4px",
+            "padding": _settings["CARD"]["padding"],
+            "marginBottom": "12px",
+        },
+        children=[
+            html.Div(
+                "Runtime settings snapshot",
+                style={
+                    "color": THEME["accent"],
+                    "fontWeight": "bold",
+                    "marginBottom": "6px",
+                },
+            ),
+            html.Pre(
+                id="settings-json",
+                style={
+                    "fontSize": "11px",
+                    "color": THEME["muted"],
+                    "whiteSpace": "pre-wrap",
+                    "margin": 0,
+                },
+            ),
+            html.Button(
+                "Refresh settings",
+                id="settings-refresh",
+                n_clicks=0,
+                style={
+                    "marginTop": "8px",
+                    "backgroundColor": THEME["accent"],
+                    "color": "#000",
+                    "border": "none",
+                    "padding": "4px 10px",
+                    "cursor": "pointer",
+                    "fontWeight": "bold",
+                },
+            ),
+        ],
+    )
+
     return html.Div(
         style={
             "fontFamily": "Arial",
@@ -944,6 +990,29 @@ def create_root_layout():
                     "marginBottom": "6px",
                 },
             ),
+            html.Div(
+                style={"display": "flex", "gap": "8px", "marginBottom": "12px"},
+                children=[
+                    html.Button(
+                        "Toggle settings",
+                        id="settings-toggle",
+                        n_clicks=0,
+                        style={
+                            "backgroundColor": THEME["accent2"],
+                            "color": "#000",
+                            "border": "none",
+                            "padding": "4px 10px",
+                            "cursor": "pointer",
+                            "fontWeight": "bold",
+                        },
+                    ),
+                    html.Div(
+                        "Environment + runtime configuration (view only)",
+                        style={"color": THEME["muted"], "fontSize": "12px", "alignSelf": "center"},
+                    ),
+                ],
+            ),
+            settings_panel,
             html.Div(
                 "Bloomberg themed analytics",
                 style={
