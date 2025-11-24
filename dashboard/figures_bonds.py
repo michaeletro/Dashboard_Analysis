@@ -107,20 +107,59 @@ def make_yield_curve_figure() -> go.Figure:
                 
                 # Try Nelson-Siegel approximation first, fall back to polynomial
                 try:
-                    # Simple Nelson-Siegel approximation without optimization
-                    beta0 = yield_clean[mat_clean > 10].mean() if (mat_clean > 10).any() else yield_clean.mean()
-                    beta1 = yield_clean[mat_clean < 2].mean() - beta0 if (mat_clean < 2).any() else 0
-                    beta2 = 0  # Simplified
-                    lam = 1.0  # Fixed decay parameter
+                    # Improved Nelson-Siegel parameter estimation based on actual data
                     
-                    # Generate smooth curve
+                    # Sort data by maturity for better estimation
+                    sorted_idx = np.argsort(mat_clean)
+                    mat_sorted = mat_clean[sorted_idx]
+                    yield_sorted = yield_clean[sorted_idx]
+                    
+                    # Better parameter estimation
+                    # β₀ = level (average of longer-term yields)
+                    if len(mat_sorted) > 5:
+                        beta0 = yield_sorted[-3:].mean()  # Average of 3 longest maturity yields
+                    else:
+                        beta0 = yield_sorted.mean()
+                    
+                    # β₁ = slope (difference between short and long end) 
+                    short_end = yield_sorted[:3].mean() if len(yield_sorted) > 3 else yield_sorted[0]
+                    beta1 = short_end - beta0
+                    
+                    # β₂ = curvature (estimate from middle vs endpoints)
+                    if len(yield_sorted) > 5:
+                        mid_idx = len(yield_sorted) // 2
+                        mid_yield = yield_sorted[mid_idx-1:mid_idx+2].mean()
+                        linear_interp = beta0 + beta1 * ((1 - np.exp(-0.609 * mat_sorted[mid_idx])) / (0.609 * mat_sorted[mid_idx]))
+                        beta2 = (mid_yield - linear_interp) * 2  # Amplify curvature effect
+                    else:
+                        beta2 = 0
+                    
+                    # Adaptive lambda based on data spread
+                    maturity_range = mat_sorted.max() - mat_sorted.min()
+                    lam = max(0.1, min(2.0, 3.0 / maturity_range))  # Adaptive decay rate
+                    
+                    # Generate smooth curve using Nelson-Siegel
                     maturities_smooth = np.linspace(mat_clean.min(), mat_clean.max(), 100)
                     exp_term = np.exp(-lam * maturities_smooth)
-                    factor1 = (1 - exp_term) / (lam * maturities_smooth + 1e-6)  # Avoid division by zero
-                    factor2 = factor1 - exp_term
-                    fitted_curve = beta0 + beta1 * factor1 + beta2 * factor2
                     
-                    curve_name = 'Nelson-Siegel Fit'
+                    # Loading functions (handle zero maturity)
+                    tau = np.maximum(maturities_smooth, 1e-6)  # Avoid division by zero
+                    L1 = np.ones_like(tau)  # Level factor
+                    L2 = (1 - np.exp(-lam * tau)) / (lam * tau)  # Slope factor
+                    L3 = L2 - np.exp(-lam * tau)  # Curvature factor
+                    
+                    fitted_curve = beta0 * L1 + beta1 * L2 + beta2 * L3
+                    
+                    # Validate fit quality - fallback to polynomial if poor
+                    if len(mat_sorted) > 3:
+                        # Quick validation: check if curve is reasonable
+                        curve_range = fitted_curve.max() - fitted_curve.min()
+                        data_range = yield_clean.max() - yield_clean.min()
+                        
+                        if curve_range > data_range * 3:  # Curve too volatile
+                            raise ValueError("Nelson-Siegel fit too volatile")
+                    
+                    curve_name = f'Nelson-Siegel (λ={lam:.2f})'
                 except:
                     # Fallback to polynomial fit
                     coeffs = np.polyfit(mat_clean, yield_clean, min(2, len(mat_clean)-1))

@@ -191,22 +191,27 @@ PD = Probability of Default, LGD = Loss Given Default, EAD = Exposure at Default
 
 ### Yield Curve Analysis
 
-**Nelson-Siegel yield curve model:**
+**Nelson-Siegel yield curve model (Nelson & Siegel, 1987):**
 $$
-y(m) = \beta_0 + \beta_1 \left(\frac{1 - e^{-\lambda m}}{\lambda m}\right) + \beta_2 \left(\frac{1 - e^{-\lambda m}}{\lambda m} - e^{-\lambda m}\right)
+y(\tau) = \beta_0 + \beta_1 \left(\frac{1 - e^{-\lambda \tau}}{\lambda \tau}\right) + \beta_2 \left(\frac{1 - e^{-\lambda \tau}}{\lambda \tau} - e^{-\lambda \tau}\right)
 $$
 
-Where:
-- $y(m)$ = yield at maturity $m$
-- $\beta_0$ = long-run level (level factor)
-- $\beta_1$ = short-term factor (slope factor) 
-- $\beta_2$ = medium-term factor (curvature factor)
-- $\lambda$ = decay rate parameter (controls curvature)
+**Factor interpretation:**
+- $\beta_0$ = long-term level factor
+- $\beta_1$ = slope factor  
+- $\beta_2$ = curvature factor
+- $\lambda$ = decay parameter (> 0)
 
-**Economic interpretation:**
-- As $m \to \infty$: $y(\infty) = \beta_0$ (long-term rate)
-- As $m \to 0$: $y(0) = \beta_0 + \beta_1$ (short-term rate)
-- $\beta_2$ controls the hump/trough in the yield curve
+**Loading functions:**
+- $L_1(\tau) = 1$ (constant, level)
+- $L_2(\tau) = \frac{1 - e^{-\lambda \tau}}{\lambda \tau}$ (monotonic, slope)
+- $L_3(\tau) = \frac{1 - e^{-\lambda \tau}}{\lambda \tau} - e^{-\lambda \tau}$ (hump-shaped, curvature)
+
+**Limit behavior:**
+- As $\tau \to 0$: $y(0) = \beta_0 + \beta_1$ (short rate)
+- As $\tau \to \infty$: $y(\infty) = \beta_0$ (long rate)
+- $L_2(0) = 1$, $L_2(\infty) = 0$
+- $L_3(0) = 0$, $L_3(\infty) = 0$, $L_3$ peaks at $\tau^* = \ln(2)/\lambda$
 
 **Svensson extension (4-factor):**
 $$
