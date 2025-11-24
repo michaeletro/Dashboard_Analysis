@@ -25,15 +25,8 @@ from .config import (
     SIM_MAXPATHS_STEP,
     SIM_MAXPATHS_DEFAULT,
 )
-from .data import (
-    cluster_metrics,
-    nmise_all,
-    mape_all,
-    nmise_mom,
-    mape_mom,
-    r2_all,
-    r2_mom,
-)
+from . import data
+
 from .figures_cross_section import (
     get_cluster_fig,
     make_regression_figure,
@@ -811,15 +804,15 @@ def layout_tab_portfolio():
 
 def layout_tab_other():
     metrics_text = []
-    if cluster_metrics is not None:
-        metrics_text.append(f"Silhouette: {cluster_metrics.silhouette:.3f}")
+    if data.cluster_metrics is not None:
+        metrics_text.append(f"Silhouette: {data.cluster_metrics.silhouette:.3f}")
         metrics_text.append(
-            f"Calinski Harabasz: {cluster_metrics.calinski_harabasz:.1f}"
+            f"Calinski Harabasz: {data.cluster_metrics.calinski_harabasz:.1f}"
         )
         metrics_text.append(
-            f"Davies Bouldin: {cluster_metrics.davies_bouldin:.3f}"
+            f"Davies Bouldin: {data.cluster_metrics.davies_bouldin:.3f}"
         )
-        metrics_text.append(f"Inertia: {cluster_metrics.inertia:.1f}")
+        metrics_text.append(f"Inertia: {data.cluster_metrics.inertia:.1f}")
     metrics_joined = " | ".join(metrics_text) if metrics_text else "No metrics available"
 
     # maths explainer at top of EQ tab
@@ -920,16 +913,16 @@ def layout_tab_other():
                             html.Ul(
                                 [
                                     html.Li(
-                                        f"All factors: MAPE {mape_all:.2f}%, "
-                                        f"NMISE {nmise_all:.4f}, R² {r2_all:.3f}",
+                                        f"All factors: MAPE {data.mape_all:.2f}%, "
+                                        f"NMISE {data.nmise_all:.4f}, R² {data.r2_all:.3f}",
                                         style={
                                             "color": THEME["text"],
                                             "fontSize": "12px",
                                         },
                                     ),
                                     html.Li(
-                                        f"Momentum only: MAPE {mape_mom:.2f}%, "
-                                        f"NMISE {nmise_mom:.4f}, R² {r2_mom:.3f}",
+                                        f"Momentum only: MAPE {data.mape_mom:.2f}%, "
+                                        f"NMISE {data.nmise_mom:.4f}, R² {data.r2_mom:.3f}",
                                         style={
                                             "color": THEME["text"],
                                             "fontSize": "12px",
