@@ -53,23 +53,98 @@ bond_credit_analysis = None
 _INIT_DONE = False
 
 
-def _make_synthetic_prices(n_assets: int = 6, n_days: int = 252 * 3, seed: int = 42) -> pd.DataFrame:
-    rng = np.random.default_rng(seed)
-    mu = rng.normal(0.08, 0.04, size=n_assets)
-    sigma = rng.uniform(0.15, 0.35, size=n_assets)
-    dt = 1.0 / 252.0
-
-    S0 = rng.uniform(50, 200, size=n_assets)
-    prices = np.zeros((n_days, n_assets), dtype=float)
-    prices[0, :] = S0
-    for t in range(1, n_days):
-        z = rng.standard_normal(n_assets)
-        incr = (mu - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * z
-        prices[t, :] = prices[t - 1, :] * np.exp(incr)
-
+def _make_synthetic_prices(n_assets=10, n_days=252) -> pd.DataFrame:
+    """Create a simple synthetic time series for fallback."""
+    np.random.seed(42)
+    returns = np.random.multivariate_normal(
+        mean=np.full(n_assets, 0.0008),
+        cov=0.01 * (0.5 * np.eye(n_assets) + 0.5 * np.ones((n_assets, n_assets))),
+        size=n_days,
+    )
+    prices = 100 * np.cumprod(1 + returns, axis=0)
     dates = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=n_days)
     cols = [f"Asset {i+1}" for i in range(n_assets)]
     return pd.DataFrame(prices, index=dates, columns=cols)
+
+
+def _parse_bond_data(df_raw: pd.DataFrame) -> pd.DataFrame:
+    """Parse the raw bond data from Excel into the format expected by BondAnalyzer."""
+    if df_raw is None or df_raw.empty:
+        raise ValueError("Raw bond data is empty")
+    
+    # Create column mapping from your Excel format to our expected format
+    column_mapping = {
+        'Issuer': 'Issuer',
+        'Sector': 'Sector', 
+        'ISIN': 'Bond_ID',
+        'Maturity Date': 'Maturity_Date',
+        'Coupon Rate (%)': 'Coupon_Rate',
+        'Clean Price': 'Market_Value',
+        'Yield to Maturity (%)': 'Yield',
+        'Duration (Modified)': 'Duration',
+        'Credit Rating': 'Rating',
+        'Spread to Benchmark (bps)': 'Credit_Spread',
+        'Probability of Default (1Y %)': 'Default_Prob',
+        '1W % Price Change': '1W_Yield_Change',
+        '1M % Price Change': '1M_Yield_Change'
+    }
+    
+    # Start with a copy of raw data
+    df_processed = df_raw.copy()
+    
+    # Clean up column names (remove extra spaces)
+    df_processed.columns = df_processed.columns.str.strip()
+    
+    # Rename columns according to mapping
+    df_processed = df_processed.rename(columns=column_mapping)
+    
+    # Calculate maturity in years if we have maturity date
+    if 'Maturity_Date' in df_processed.columns:
+        try:
+            df_processed['Maturity_Date'] = pd.to_datetime(df_processed['Maturity_Date'], errors='coerce')
+            today = pd.Timestamp.now()
+            df_processed['Maturity_Years'] = (df_processed['Maturity_Date'] - today).dt.days / 365.25
+            df_processed['Maturity_Years'] = df_processed['Maturity_Years'].clip(lower=0)
+        except Exception:
+            # Fallback to duration if maturity date parsing fails
+            df_processed['Maturity_Years'] = df_processed.get('Duration', 5.0)
+    
+    # Convert credit spread from bps to decimal
+    if 'Credit_Spread' in df_processed.columns:
+        df_processed['Credit_Spread'] = pd.to_numeric(df_processed['Credit_Spread'], errors='coerce') / 10000
+    
+    # Convert yields from percentage to decimal
+    for col in ['Yield', 'Coupon_Rate']:
+        if col in df_processed.columns:
+            df_processed[col] = pd.to_numeric(df_processed[col], errors='coerce') / 100
+    
+    # Ensure numeric columns are properly typed
+    numeric_cols = ['Duration', 'Market_Value', 'Yield', 'Coupon_Rate', 'Credit_Spread', 
+                   'Maturity_Years', 'Default_Prob', '1W_Yield_Change', '1M_Yield_Change']
+    for col in numeric_cols:
+        if col in df_processed.columns:
+            df_processed[col] = pd.to_numeric(df_processed[col], errors='coerce')
+    
+    # Add portfolio weights (equal weight for now)
+    if len(df_processed) > 0:
+        df_processed['Weight'] = 1.0 / len(df_processed)
+    
+    # Add face value if not present
+    if 'Face_Value' not in df_processed.columns:
+        df_processed['Face_Value'] = 1000.0  # Standard $1000 face value
+    
+    # Calculate treasury yield (approximate as yield minus credit spread)
+    if 'Yield' in df_processed.columns and 'Credit_Spread' in df_processed.columns:
+        df_processed['Treasury_Yield'] = df_processed['Yield'] - df_processed['Credit_Spread'].fillna(0)
+    
+    # Drop rows with missing critical data
+    critical_cols = ['Duration', 'Yield']
+    df_processed = df_processed.dropna(subset=[col for col in critical_cols if col in df_processed.columns])
+    
+    print(f"✅ Parsed {len(df_processed)} bonds from Excel data")
+    print(f"📊 Available columns: {list(df_processed.columns)}")
+    
+    return df_processed
 
 
 def ensure_data_loaded() -> None:
@@ -105,8 +180,10 @@ def ensure_data_loaded() -> None:
         df_equity = all_sheets[list(all_sheets.keys())[0]].copy()
         # Try to load bond data from second sheet, fallback to synthetic
         try:
-            df_bonds = list(all_sheets.values())[1].copy()
-        except (IndexError, KeyError):
+            df_bonds_raw = list(all_sheets.values())[1].copy()
+            df_bonds = _parse_bond_data(df_bonds_raw)
+        except (IndexError, KeyError, Exception) as e:
+            print(f"Bond data loading failed ({e}), using synthetic data")
             df_bonds = create_synthetic_bond_data(n_bonds=80, seed=456)
 
     # Engine and weights

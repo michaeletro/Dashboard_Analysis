@@ -44,18 +44,44 @@ class BondAnalyzer:
         if self.bonds_data is None:
             raise ValueError("No bond data loaded")
         
+        # Handle missing maturity data
+        maturity_col = None
+        for col in ['Maturity_Years', 'Duration']:
+            if col in self.bonds_data.columns:
+                maturity_col = col
+                break
+        
+        if maturity_col is None:
+            print("Warning: No maturity data found, using duration as proxy")
+            # Create approximate maturity from duration
+            maturity_values = self.bonds_data['Duration'] * 1.2  # Rough approximation
+        else:
+            maturity_values = self.bonds_data[maturity_col]
+        
         # Group by maturity buckets
-        maturity_buckets = pd.cut(self.bonds_data['Maturity_Years'], 
+        maturity_buckets = pd.cut(maturity_values, 
                                 bins=[0, 1, 3, 5, 10, 30], 
                                 labels=['<1Y', '1-3Y', '3-5Y', '5-10Y', '10Y+'])
         
-        curve_stats = self.bonds_data.groupby(maturity_buckets).agg({
-            'Yield': ['mean', 'std', 'count'],
-            'Duration': 'mean',
-            'Credit_Spread': 'mean' if 'Credit_Spread' in self.bonds_data.columns else lambda x: 0
-        }).round(4)
+        # Build aggregation dict based on available columns
+        agg_dict = {}
+        if 'Yield' in self.bonds_data.columns:
+            agg_dict['Yield'] = ['mean', 'std', 'count']
+        if 'Duration' in self.bonds_data.columns:
+            agg_dict['Duration'] = 'mean'
+        if 'Credit_Spread' in self.bonds_data.columns:
+            agg_dict['Credit_Spread'] = 'mean'
         
-        return curve_stats
+        if not agg_dict:
+            # Fallback if no recognized columns
+            return pd.DataFrame()
+        
+        try:
+            curve_stats = self.bonds_data.groupby(maturity_buckets).agg(agg_dict).round(4)
+            return curve_stats
+        except Exception as e:
+            print(f"Warning: Yield curve analysis failed: {e}")
+            return pd.DataFrame()
     
     def credit_analysis(self) -> Dict[str, pd.DataFrame]:
         """Analyze credit quality distribution and spreads."""
@@ -64,17 +90,22 @@ class BondAnalyzer:
         
         # Credit rating distribution
         if 'Rating' in self.bonds_data.columns:
-            rating_dist = self.bonds_data['Rating'].value_counts().sort_index()
+            rating_dist = pd.DataFrame({'Count': self.bonds_data['Rating'].value_counts().sort_index()})
         else:
-            rating_dist = pd.Series()
+            rating_dist = pd.DataFrame()
         
         # Sector analysis if available
         if 'Sector' in self.bonds_data.columns:
-            sector_stats = self.bonds_data.groupby('Sector').agg({
-                'Yield': 'mean',
-                'Duration': 'mean',
-                'Credit_Spread': 'mean' if 'Credit_Spread' in self.bonds_data.columns else lambda x: 0
-            }).round(4)
+            agg_dict = {'Yield': 'mean'} if 'Yield' in self.bonds_data.columns else {}
+            if 'Duration' in self.bonds_data.columns:
+                agg_dict['Duration'] = 'mean'
+            if 'Credit_Spread' in self.bonds_data.columns:
+                agg_dict['Credit_Spread'] = 'mean'
+            
+            if agg_dict:
+                sector_stats = self.bonds_data.groupby('Sector').agg(agg_dict).round(4)
+            else:
+                sector_stats = pd.DataFrame()
         else:
             sector_stats = pd.DataFrame()
         
@@ -98,8 +129,12 @@ def create_synthetic_bond_data(n_bonds: int = 100, seed: int = 42) -> pd.DataFra
     maturities = np.random.exponential(7, n_bonds)  # Average 7-year maturity
     maturities = np.clip(maturities, 0.25, 30)  # Between 3 months and 30 years
     
-    # Duration is roughly 85% of maturity for typical bonds
-    durations = maturities * np.random.uniform(0.7, 0.95, n_bonds)
+    # Duration calculation: higher coupon = lower duration
+    # Modified duration approximation: Duration ≈ (1 - (1 + y)^(-T)) / y for bonds
+    # Simplified: use maturity adjusted for coupon effect
+    coupon_rates = np.random.uniform(0.01, 0.08, n_bonds)  # 1% to 8% coupons
+    duration_adjustment = 1 / (1 + coupon_rates/2)  # Semi-annual coupon effect
+    durations = maturities * duration_adjustment * np.random.uniform(0.85, 0.95, n_bonds)
     
     # Base treasury yield curve (simplified)
     treasury_yields = 0.02 + 0.025 * (1 - np.exp(-maturities / 5))  # Rising curve
@@ -136,9 +171,9 @@ def create_synthetic_bond_data(n_bonds: int = 100, seed: int = 42) -> pd.DataFra
 
 def calculate_bond_portfolio_risk(df_bonds: pd.DataFrame) -> Dict[str, float]:
     """Calculate portfolio-level risk metrics."""
-    weights = df_bonds['Weight'].values
-    durations = df_bonds['Duration'].values
-    yields = df_bonds['Yield'].values
+    weights = np.asarray(df_bonds['Weight'].values, dtype=float)
+    durations = np.asarray(df_bonds['Duration'].values, dtype=float)
+    yields = np.asarray(df_bonds['Yield'].values, dtype=float)
     
     # Portfolio duration (DV01)
     portfolio_duration = np.sum(weights * durations)
@@ -151,14 +186,21 @@ def calculate_bond_portfolio_risk(df_bonds: pd.DataFrame) -> Dict[str, float]:
         # Simple credit score: AAA=1, AA+=2, ..., BBB-=10
         rating_map = {'AAA': 1, 'AA+': 2, 'AA': 3, 'AA-': 4, 'A+': 5, 'A': 6, 'A-': 7, 'BBB+': 8, 'BBB': 9, 'BBB-': 10}
         credit_scores = df_bonds['Rating'].map(rating_map).fillna(10)
-        avg_credit_quality = np.average(credit_scores.values, weights=weights)
+        avg_credit_quality = np.average(np.asarray(credit_scores.values, dtype=float), weights=weights)
     else:
         avg_credit_quality = 5.0  # Default to A-rated
     
+    # Calculate face value sum
+    face_value_col = 'Face_Value' if 'Face_Value' in df_bonds.columns else None
+    if face_value_col:
+        total_face_value = float(df_bonds[face_value_col].sum())
+    else:
+        total_face_value = float(len(df_bonds) * 1000)  # Assume $1000 face value
+    
     return {
-        'portfolio_duration': portfolio_duration,
-        'portfolio_yield': portfolio_yield,
-        'average_credit_quality': avg_credit_quality,
-        'total_face_value': df_bonds['Face_Value'].sum(),
+        'portfolio_duration': float(portfolio_duration),
+        'portfolio_yield': float(portfolio_yield),
+        'average_credit_quality': float(avg_credit_quality),
+        'total_face_value': total_face_value,
         'number_of_bonds': len(df_bonds)
     }

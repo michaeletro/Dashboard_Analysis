@@ -17,51 +17,120 @@ def make_yield_curve_figure() -> go.Figure:
     
     fig = go.Figure()
     
+    # Determine maturity column
+    maturity_col = None
+    for col in ['Maturity_Years', 'Duration']:
+        if col in df_bonds.columns and not df_bonds[col].isna().all():
+            maturity_col = col
+            break
+    
+    if maturity_col is None:
+        # No valid maturity data, show error
+        fig.add_annotation(
+            x=0.5, y=0.5, xref="paper", yref="paper",
+            text="No maturity data available", showarrow=False,
+            font=dict(size=16, color=THEME['text_color'])
+        )
+        fig.update_layout(
+            title="Bond Yield Curve",
+            xaxis_title="Maturity",
+            yaxis_title="Yield (%)"
+        )
+        return style_figure(fig, title="Bond Yield Curve")
+    
+    # Get yield column
+    yield_col = 'Yield' if 'Yield' in df_bonds.columns else None
+    if yield_col is None:
+        fig.add_annotation(
+            x=0.5, y=0.5, xref="paper", yref="paper",
+            text="No yield data available", showarrow=False,
+            font=dict(size=16, color=THEME['text_color'])
+        )
+        fig.update_layout(
+            title="Bond Yield Curve",
+            xaxis_title="Maturity", 
+            yaxis_title="Yield (%)"
+        )
+        return style_figure(fig, title="Bond Yield Curve")
+    
+    # Color by credit spread if available, otherwise use duration
+    color_col = None
+    color_title = "Value"
+    if 'Credit_Spread' in df_bonds.columns and not df_bonds['Credit_Spread'].isna().all():
+        color_col = 'Credit_Spread'
+        color_values = df_bonds[color_col] * 10000  # Convert to bps
+        color_title = "Credit Spread (bps)"
+    elif 'Duration' in df_bonds.columns:
+        color_col = 'Duration'
+        color_values = df_bonds[color_col]
+        color_title = "Duration (Years)"
+    else:
+        color_values = df_bonds.index  # Use index as fallback
+        color_title = "Bond Index"
+    
     # Scatter plot of individual bonds
     fig.add_trace(
         go.Scatter(
-            x=df_bonds['Maturity_Years'],
-            y=df_bonds['Yield'] * 100,  # Convert to percentage
+            x=df_bonds[maturity_col],
+            y=df_bonds[yield_col] * 100,  # Convert to percentage
             mode='markers',
             marker=dict(
                 size=8,
-                color=df_bonds['Credit_Spread'] * 100,
+                color=color_values,
                 colorscale='Viridis',
-                colorbar=dict(title='Credit Spread (bps)', x=1.02),
+                colorbar=dict(title=color_title, x=1.02),
                 showscale=True
             ),
-            text=df_bonds['Rating'],
+            text=df_bonds.get('Rating', 'N/A'),
             hovertemplate=(
-                'Maturity: %{x:.1f}Y<br>'
+                f'{maturity_col}: %{{x:.1f}}<br>'
                 'Yield: %{y:.2f}%<br>'
                 'Rating: %{text}<br>'
-                'Credit Spread: %{marker.color:.0f}bps<extra></extra>'
+                f'{color_title}: %{{marker.color:.1f}}<extra></extra>'
             ),
             name='Bonds'
         )
     )
     
-    # Add fitted yield curve
-    maturities_smooth = np.linspace(df_bonds['Maturity_Years'].min(), 
-                                   df_bonds['Maturity_Years'].max(), 100)
-    # Simple yield curve fit: y = a + b*(1 - exp(-c*x))
-    treasury_curve = 2.0 + 2.5 * (1 - np.exp(-maturities_smooth / 5))
-    
-    fig.add_trace(
-        go.Scatter(
-            x=maturities_smooth,
-            y=treasury_curve,
-            mode='lines',
-            line=dict(color=THEME['accent'], width=3, dash='dash'),
-            name='Treasury Curve',
-            hovertemplate='Maturity: %{x:.1f}Y<br>Treasury Yield: %{y:.2f}%<extra></extra>'
-        )
-    )
+    # Add fitted yield curve if we have sufficient data
+    if len(df_bonds) > 5:
+        try:
+            # Fit polynomial to actual bond data
+            maturities_for_fit = np.asarray(df_bonds[maturity_col].values, dtype=float)
+            yields_for_fit = np.asarray(df_bonds[yield_col].values, dtype=float) * 100  # Convert to %
+            
+            # Remove any NaN values
+            valid_mask = ~(np.isnan(maturities_for_fit) | np.isnan(yields_for_fit))
+            if valid_mask.sum() > 3:  # Need at least 3 points
+                mat_clean = maturities_for_fit[valid_mask]
+                yield_clean = yields_for_fit[valid_mask]
+                
+                # Fit quadratic polynomial to the data
+                coeffs = np.polyfit(mat_clean, yield_clean, min(2, len(mat_clean)-1))
+                
+                # Generate smooth curve
+                maturities_smooth = np.linspace(mat_clean.min(), mat_clean.max(), 100)
+                fitted_curve = np.polyval(coeffs, maturities_smooth)
+                
+                fig.add_trace(
+                    go.Scatter(
+                        x=maturities_smooth,
+                        y=fitted_curve,
+                        mode='lines',
+                        line=dict(color=THEME['accent'], width=3, dash='dash'),
+                        name='Fitted Curve',
+                        hovertemplate='Maturity: %{x:.1f}Y<br>Fitted Yield: %{y:.2f}%<extra></extra>'
+                    )
+                )
+        except Exception as e:
+            # Skip curve fitting if it fails
+            print(f"Yield curve fitting failed: {e}")
     
     fig = style_figure(fig, height=450, title='Yield Curve Analysis')
     fig.update_layout(
-        xaxis_title='Maturity (Years)',
+        xaxis_title=f'{maturity_col.replace("_", " ")}',
         yaxis_title='Yield (%)',
+        showlegend=True,
         legend=dict(orientation='h', yanchor='bottom', y=1.02, xanchor='left', x=0)
     )
     
@@ -74,6 +143,15 @@ def make_duration_distribution_figure() -> go.Figure:
     
     df_bonds = data.df_bonds
     duration_stats = data.bond_duration_stats
+    
+    if 'Duration' not in df_bonds.columns:
+        fig = go.Figure()
+        fig.add_annotation(
+            x=0.5, y=0.5, xref="paper", yref="paper",
+            text="No duration data available", showarrow=False,
+            font=dict(size=16, color=THEME['text_color'])
+        )
+        return style_figure(fig, title="Duration Distribution Analysis")
     
     fig = make_subplots(
         rows=1, cols=2,
@@ -93,39 +171,54 @@ def make_duration_distribution_figure() -> go.Figure:
         row=1, col=1
     )
     
-    # Add vertical line for portfolio duration
-    port_duration = duration_stats['portfolio_duration']
-    fig.add_vline(
-        x=port_duration,
-        line=dict(color=THEME['accent'], width=2, dash='dash'),
-        annotation_text=f'Portfolio: {port_duration:.2f}',
-        row=1, col=1
-    )
+    # Add vertical line for portfolio duration if available
+    if duration_stats and 'portfolio_duration' in duration_stats:
+        port_duration = duration_stats['portfolio_duration']
+        fig.add_vline(
+            x=port_duration,
+            line=dict(color=THEME['accent'], width=2, dash='dash'),
+            annotation_text=f'Portfolio: {port_duration:.2f}',
+            row=1, col=1
+        )
     
-    # Duration vs Yield scatter
-    fig.add_trace(
-        go.Scatter(
-            x=df_bonds['Duration'],
-            y=df_bonds['Yield'] * 100,
-            mode='markers',
-            marker=dict(
-                size=8,
-                color=df_bonds['Weight'] * 100,
-                colorscale='Plasma',
-                showscale=False
+    # Duration vs Yield scatter (if yield data available)
+    if 'Yield' in df_bonds.columns:
+        # Determine color column
+        color_col = None
+        color_title = "Value"
+        if 'Weight' in df_bonds.columns:
+            color_values = df_bonds['Weight'] * 100
+            color_title = "Weight (%)"
+        elif 'Credit_Spread' in df_bonds.columns:
+            color_values = df_bonds['Credit_Spread'] * 10000
+            color_title = "Credit Spread (bps)"
+        else:
+            color_values = df_bonds.index
+            color_title = "Bond Index"
+        
+        fig.add_trace(
+            go.Scatter(
+                x=df_bonds['Duration'],
+                y=df_bonds['Yield'] * 100,
+                mode='markers',
+                marker=dict(
+                    size=8,
+                    color=color_values,
+                    colorscale='Plasma',
+                    showscale=False
+                ),
+                text=df_bonds.get('Rating', 'N/A'),
+                hovertemplate=(
+                    'Duration: %{x:.2f}<br>'
+                    'Yield: %{y:.2f}%<br>'
+                    f'{color_title}: %{{marker.color:.1f}}<br>'
+                    'Rating: %{text}<extra></extra>'
+                ),
+                name='Bonds',
+                showlegend=False
             ),
-            text=df_bonds['Rating'],
-            hovertemplate=(
-                'Duration: %{x:.2f}<br>'
-                'Yield: %{y:.2f}%<br>'
-                'Weight: %{marker.color:.2f}%<br>'
-                'Rating: %{text}<extra></extra>'
-            ),
-            name='Bonds',
-            showlegend=False
-        ),
-        row=1, col=2
-    )
+            row=1, col=2
+        )
     
     # Style subplots
     fig.update_xaxes(title_text='Duration', row=1, col=1)
@@ -133,14 +226,7 @@ def make_duration_distribution_figure() -> go.Figure:
     fig.update_xaxes(title_text='Duration', row=1, col=2)
     fig.update_yaxes(title_text='Yield (%)', row=1, col=2)
     
-    fig.update_layout(
-        height=450,
-        title=dict(text='Duration Risk Analysis', font=dict(size=16, color=THEME['accent'])),
-        paper_bgcolor=THEME['card'],
-        plot_bgcolor=THEME['panel'],
-        font=dict(color=THEME['text']),
-        showlegend=False
-    )
+    fig = style_figure(fig, height=450, title='Duration Risk Analysis')
     
     return fig
 
@@ -263,7 +349,7 @@ def make_bond_performance_figure() -> go.Figure:
         rating_data = df_bonds[df_bonds['Rating'] == rating]
         fig.add_trace(
             go.Box(
-                y=rating_data['1M_Yield_Change'] * 100,  # Convert to bps
+                y=rating_data['1M_Yield_Change'] * 100,  # Convert % to bps
                 name=rating,
                 boxmean=True,
                 showlegend=False
