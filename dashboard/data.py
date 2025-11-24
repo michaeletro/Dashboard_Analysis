@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import numpy as np
 import pandas as pd
 
@@ -18,19 +19,45 @@ from time_series_modules.StochasticPortfolioEngine import (
 # Load data from Excel
 # ---------------------------------------------------------------------
 
-excel_file_path = "../DBG Data Set Presentation Prep Doc.xlsx"
+def _make_synthetic_prices(n_assets: int = 6, n_days: int = 252 * 3, seed: int = 42) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    mu = rng.normal(0.08, 0.04, size=n_assets)   # annual drift
+    sigma = rng.uniform(0.15, 0.35, size=n_assets)  # annual vol
+    dt = 1.0 / 252.0
+
+    S0 = rng.uniform(50, 200, size=n_assets)
+    prices = np.zeros((n_days, n_assets), dtype=float)
+    prices[0, :] = S0
+    for t in range(1, n_days):
+        z = rng.standard_normal(n_assets)
+        incr = (mu - 0.5 * sigma**2) * dt + sigma * np.sqrt(dt) * z
+        prices[t, :] = prices[t - 1, :] * np.exp(incr)
+
+    dates = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=n_days)
+    cols = [f"Asset {i+1}" for i in range(n_assets)]
+    return pd.DataFrame(prices, index=dates, columns=cols)
+
+
+excel_file_path = os.environ.get("DATA_XLSX", "../DBG Data Set Presentation Prep Doc.xlsx")
 
 loader = DataLoader()
-all_sheets = loader.read_all_sheets(excel_file_path)
-if not all_sheets:
-    raise FileNotFoundError("No sheets found in Excel file")
+all_sheets = None
+if os.path.exists(excel_file_path):
+    all_sheets = loader.read_all_sheets(excel_file_path)
+    if not all_sheets:
+        all_sheets = None
 
-# time series sheet for engine (third sheet)
-df_time_series = list(all_sheets.values())[2].copy()
-df_time_series.set_index(df_time_series.columns[0], inplace=True)
+if all_sheets is None:
+    # Fallback to synthetic datasets
+    df_time_series = _make_synthetic_prices()
+    df_equity = loader.create_synthetic_data(n_stocks=150, seed=123)
+else:
+    # time series sheet for engine (third sheet)
+    df_time_series = list(all_sheets.values())[2].copy()
+    df_time_series.set_index(df_time_series.columns[0], inplace=True)
 
-# this is price level data (engine will build returns internally)
-returns_df = df_time_series
+    # equity cross-section (first sheet)
+    df_equity = all_sheets[list(all_sheets.keys())[0]].copy()
 
 # ---------------------------------------------------------------------
 # Time series engine and portfolio weights
@@ -82,10 +109,8 @@ except Exception as bl_err:
 
 
 # ---------------------------------------------------------------------
-# Equity cross section (first sheet) and factor construction
+# Equity cross section and factor construction
 # ---------------------------------------------------------------------
-
-df_equity = all_sheets[list(all_sheets.keys())[0]].copy()
 
 factor_analyzer = FactorAnalyzer()
 factor_scores = factor_analyzer.construct_factor_scores(df_equity)
