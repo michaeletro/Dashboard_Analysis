@@ -104,22 +104,51 @@ def make_frontier_figure(n_points: int, show_tangency: bool) -> go.Figure:
 def make_paths_figure(
     n_steps: int,
     n_paths: int,
-    use_tangency: bool,
+    portfolio_type: str,
     max_paths: int,
 ) -> go.Figure:
     """
     Simulated forward portfolio paths starting from current prices,
     normalised so that t = 0 is roughly 1 for all paths.
+    
+    Args:
+        portfolio_type: 'tangency', 'equal', or 'black_litterman'
     """
     data.ensure_data_loaded()
     engine = data.engine
-    # choose weights
-    if use_tangency:
+    
+    # choose weights based on portfolio type
+    if portfolio_type == "tangency":
         if engine.w_tangency_ is None:
             engine.tangency_weights()
         w = engine.w_tangency_
-    else:
+        title_suffix = "Tangency Portfolio"
+    elif portfolio_type == "equal":
         w = np.ones(engine.n_assets, dtype=float) / engine.n_assets
+        title_suffix = "Equal Weight Portfolio"
+    elif portfolio_type == "black_litterman":
+        if data.w_bl is None:
+            # Try to compute Black-Litterman weights if not available
+            try:
+                data.ensure_data_loaded()  # This should compute BL weights
+                w = data.w_bl
+                if w is None:
+                    raise ValueError("Black-Litterman weights unavailable")
+            except Exception:
+                # Fall back to tangency if BL fails
+                if engine.w_tangency_ is None:
+                    engine.tangency_weights()
+                w = engine.w_tangency_
+                title_suffix = "Tangency Portfolio (BL fallback)"
+            else:
+                title_suffix = "Black-Litterman Portfolio"
+        else:
+            w = data.w_bl
+            title_suffix = "Black-Litterman Portfolio"
+    else:
+        # Default to equal weight for unknown types
+        w = np.ones(engine.n_assets, dtype=float) / engine.n_assets
+        title_suffix = "Equal Weight Portfolio"
 
     # start from last observed prices
     S0 = engine.level.iloc[-1].values
@@ -169,7 +198,7 @@ def make_paths_figure(
     fig = style_figure(
         fig,
         height=430,
-        title="Simulated portfolio paths",
+        title=f"Simulated portfolio paths - {title_suffix}",
     )
     fig.update_layout(
         xaxis_title="Time step",

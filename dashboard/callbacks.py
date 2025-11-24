@@ -10,13 +10,16 @@ from .config import (
     FRONTIER_MAX,
     SIM_STEPS_MIN,
     SIM_STEPS_MAX,
+    SIM_STEPS_DEFAULT,
     SIM_NPATHS_MIN,
     SIM_NPATHS_MAX,
+    SIM_NPATHS_DEFAULT,
     SIM_MAXPATHS_MIN,
     SIM_MAXPATHS_MAX,
+    SIM_MAXPATHS_DEFAULT,
     get_runtime_settings,
 )
-from .layouts import layout_tab_portfolio, layout_tab_other, layout_tab_bonds
+from .layouts import layout_tab_portfolio, layout_tab_other, layout_tab_bonds, layout_tab_risk
 from .figures_portfolio import (
     make_frontier_figure,
     make_paths_figure,
@@ -37,6 +40,8 @@ def render_tab(tab_value):
         return layout_tab_other()
     if tab_value == "tab-bonds":
         return layout_tab_bonds()
+    if tab_value == "tab-risk":
+        return layout_tab_risk()
     return html.Div("Unknown tab")
 
 
@@ -76,19 +81,22 @@ def clear_caches(n_clicks):
     State("sim-weights-type", "value"),
 )
 def update_simulation(n_clicks, n_steps, n_paths, max_paths, weights_type):
+    # Use default parameters if the button hasn't been clicked yet
     if not n_clicks:
-        return go.Figure()
-
-    n_steps = int(max(SIM_STEPS_MIN, min(SIM_STEPS_MAX, n_steps)))
-    n_paths = int(max(SIM_NPATHS_MIN, min(SIM_NPATHS_MAX, n_paths)))
-    max_paths = int(max(SIM_MAXPATHS_MIN, min(SIM_MAXPATHS_MAX, max_paths)))
-
-    use_tangency = weights_type == "tangency"
+        n_steps = SIM_STEPS_DEFAULT
+        n_paths = SIM_NPATHS_DEFAULT  
+        max_paths = SIM_MAXPATHS_DEFAULT
+        weights_type = "tangency"
+    else:
+        # Validate and bound the user inputs
+        n_steps = int(max(SIM_STEPS_MIN, min(SIM_STEPS_MAX, n_steps)))
+        n_paths = int(max(SIM_NPATHS_MIN, min(SIM_NPATHS_MAX, n_paths)))
+        max_paths = int(max(SIM_MAXPATHS_MIN, min(SIM_MAXPATHS_MAX, max_paths)))
 
     fig = make_paths_figure(
         n_steps=n_steps,
         n_paths=n_paths,
-        use_tangency=use_tangency,
+        portfolio_type=weights_type,
         max_paths=max_paths,
     )
     return fig
@@ -113,12 +121,17 @@ def update_tangency_levels(n_paths):
     State("portfolio-3d-maxpaths", "value"),
 )
 def update_portfolio_3d(n_clicks, port_type, n_steps, n_paths, max_paths):
+    # Use default parameters if the button hasn't been clicked yet
     if not n_clicks:
-        return go.Figure()
-
-    n_steps = int(max(SIM_STEPS_MIN, min(SIM_STEPS_MAX, n_steps)))
-    n_paths = int(max(50, min(500, n_paths)))
-    max_paths = int(max(10, min(100, max_paths)))
+        port_type = "tangency"
+        n_steps = SIM_STEPS_DEFAULT
+        n_paths = SIM_NPATHS_DEFAULT
+        max_paths = 30  # Default for 3D (lower than 2D for performance)
+    else:
+        # Validate and bound the user inputs
+        n_steps = int(max(SIM_STEPS_MIN, min(SIM_STEPS_MAX, n_steps)))
+        n_paths = int(max(50, min(500, n_paths)))
+        max_paths = int(max(10, min(100, max_paths)))
 
     fig = make_portfolio_paths_3d_figure(
         port_type=port_type,

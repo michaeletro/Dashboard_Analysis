@@ -33,6 +33,11 @@ from .figures_bonds import (
     make_credit_analysis_figure,
     make_bond_performance_figure,
 )
+from .figures_risk import (
+    make_risk_dashboard_figure,
+    make_correlation_heatmap_figure,
+    make_bond_duration_risk_figure,
+)
 
 
 # ---------- LaTeX markdown blocks for each tab ----------
@@ -115,10 +120,48 @@ $$
 \min_w \; w^{\top} \Sigma w \quad \text{s.t.} \quad w^{\top} \mu = \mu^\*,\; \mathbf{1}^{\top} w = 1.
 $$
 
-### Tangency (max Sharpe) portfolio
-With risk free rate $r_f$:
+### Portfolio Construction Methods
+
+#### 1. Equal Weight Portfolio
+Simplest diversification:
 $$
-w^\* = \frac{\Sigma^{-1}(\mu - r_f \mathbf{1})}{\mathbf{1}^{\top} \Sigma^{-1}(\mu - r_f \mathbf{1})}.
+w_i = \frac{1}{n}, \quad i = 1, \ldots, n
+$$
+where $n$ is the number of assets.
+
+#### 2. Tangency (Max Sharpe) Portfolio
+Optimal risk-adjusted portfolio with risk-free rate $r_f$:
+$$
+w^{\text{tan}} = \frac{\Sigma^{-1}(\mu - r_f \mathbf{1})}{\mathbf{1}^{\top} \Sigma^{-1}(\mu - r_f \mathbf{1})}
+$$
+Maximises Sharpe ratio: $\text{SR} = \frac{\mu_p - r_f}{\sigma_p}$.
+
+#### 3. Black-Litterman Portfolio
+Bayesian approach combining market equilibrium with investor views:
+
+**Prior (Market Equilibrium):**
+$$
+\mu_{\text{prior}} = \lambda \Sigma w_{\text{mkt}}
+$$
+where $\lambda$ is risk aversion, $w_{\text{mkt}}$ are market cap weights.
+
+**Investor Views:** $P \mu = Q + \varepsilon$, where:
+- $P$: picking matrix (which assets the views concern)
+- $Q$: expected returns from views
+- $\varepsilon \sim \mathcal{N}(0, \Omega)$: view uncertainty
+
+**Posterior (Black-Litterman):**
+$$
+\mu_{\text{BL}} = \left[(\tau\Sigma)^{-1} + P^{\top}\Omega^{-1}P\right]^{-1} \left[(\tau\Sigma)^{-1}\mu_{\text{prior}} + P^{\top}\Omega^{-1}Q\right]
+$$
+$$
+\Sigma_{\text{BL}} = \left[(\tau\Sigma)^{-1} + P^{\top}\Omega^{-1}P\right]^{-1}
+$$
+where $\tau$ controls confidence in prior.
+
+**Black-Litterman Tangency:**
+$$
+w^{\text{BL}} = \frac{\Sigma_{\text{BL}}^{-1}(\mu_{\text{BL}} - r_f \mathbf{1})}{\mathbf{1}^{\top} \Sigma_{\text{BL}}^{-1}(\mu_{\text{BL}} - r_f \mathbf{1})}
 $$
 
 ---
@@ -225,6 +268,82 @@ $$
 R_p = \sum_i w_i R_i = \sum_i w_i (\text{Duration Effect}_i + \text{Credit Effect}_i + \text{Selection Effect}_i)
 $$
 Duration effect captures interest rate risk, credit effect captures spread changes.
+"""
+
+risk_math_md = r"""
+**Risk Management Mathematics**
+
+### Value at Risk (VaR)
+
+**Historical VaR**: $(1-\alpha)$ percentile of return distribution
+$$
+\text{VaR}_\alpha = -F^{-1}(\alpha)
+$$
+where $F^{-1}$ is the inverse CDF of portfolio returns.
+
+**Parametric VaR**: Assumes normal distribution
+$$
+\text{VaR}_\alpha = -(\mu + \sigma \Phi^{-1}(\alpha))
+$$
+where $\Phi^{-1}$ is the inverse standard normal CDF.
+
+**Expected Shortfall (CVaR)**: Expected loss beyond VaR
+$$
+\text{ES}_\alpha = -E[R | R \leq -\text{VaR}_\alpha]
+$$
+
+### Factor Risk Attribution
+
+Portfolio variance decomposition:
+$$
+\sigma_p^2 = w^T \Sigma w = \sum_{i,j} w_i w_j \sigma_{ij}
+$$
+
+**Factor model**: $R_i = \alpha_i + \sum_k \beta_{ik} F_k + \epsilon_i$
+
+Portfolio factor exposure:
+$$
+\beta_{pk} = \sum_i w_i \beta_{ik}
+$$
+
+Factor contribution to risk:
+$$
+\text{Risk Contrib}_k = \frac{\beta_{pk} \sigma_{kk} \beta_{pk}}{\sigma_p^2}
+$$
+
+### Concentration Risk Metrics
+
+**Herfindahl-Hirschman Index (HHI)**:
+$$
+\text{HHI} = \sum_{i=1}^N w_i^2
+$$
+where $w_i$ are portfolio weights. Range: $[1/N, 1]$
+
+**Effective Number of Holdings**:
+$$
+N_{\text{eff}} = \frac{1}{\text{HHI}}
+$$
+
+### Correlation Analysis
+
+**Dynamic conditional correlation**:
+$$
+\rho_{ij,t} = \frac{Q_{ij,t}}{\sqrt{Q_{ii,t} Q_{jj,t}}}
+$$
+
+**Regime-dependent correlation**: $\rho_t = \rho_1 S_t + \rho_2 (1-S_t)$
+
+### Stress Testing
+
+**Scenario analysis**: Apply shocks $\Delta F$ to risk factors:
+$$
+\Delta P = \sum_k \frac{\partial P}{\partial F_k} \Delta F_k + \frac{1}{2} \sum_{k,l} \frac{\partial^2 P}{\partial F_k \partial F_l} \Delta F_k \Delta F_l
+$$
+
+**Monte Carlo**: Generate scenarios from multivariate distribution:
+$$
+\Delta F \sim \mathcal{N}(0, \Sigma_F)
+$$
 """
 
 cross_section_math_md = r"""
@@ -569,6 +688,10 @@ def layout_tab_portfolio():
                                                 "label": "Equal weight",
                                                 "value": "equal",
                                             },
+                                            {
+                                                "label": "Black-Litterman",
+                                                "value": "black_litterman",
+                                            },
                                         ],
                                         value="tangency",
                                         inline=True,
@@ -599,7 +722,7 @@ def layout_tab_portfolio():
                                     figure=make_paths_figure(
                                         n_steps=settings["SIM_STEPS"]["default"],
                                         n_paths=settings["SIM_NPATHS"]["default"],
-                                        use_tangency=True,
+                                        portfolio_type="tangency",
                                         max_paths=settings["SIM_MAXPATHS"]["default"],
                                     ),
                                     style={"height": "460px", "width": "100%"},
@@ -1145,6 +1268,102 @@ def layout_tab_bonds():
     )
 
 
+def layout_tab_risk():
+    """Risk management tab with advanced risk analytics."""
+    # Math explainer at top
+    math_block = card(
+        title="Risk Management Mathematics",
+        children=dcc.Markdown(
+            risk_math_md,
+            mathjax=True,
+            style={
+                "fontSize": "12px",
+                "color": THEME["muted"],
+                "whiteSpace": "pre-wrap",
+            },
+        ),
+    )
+
+    # Row 1: Main risk dashboard
+    row1 = html.Div(
+        style={"display": "flex", "gap": "24px"},
+        children=[
+            html.Div(
+                style={"flex": "1"},
+                children=[
+                    card(
+                        title="Portfolio Risk Dashboard",
+                        children=[
+                            dcc.Graph(
+                                id="risk-dashboard-graph",
+                                figure=make_risk_dashboard_figure(),
+                                style={"height": "800px", "width": "100%"},
+                                config=GRAPH_CONFIG,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+        ],
+    )
+
+    # Row 2: Correlation analysis and bond duration risk
+    row2 = html.Div(
+        style={"display": "flex", "gap": "24px"},
+        children=[
+            html.Div(
+                style={"flex": "1"},
+                children=[
+                    card(
+                        title="Factor & Metric Correlations",
+                        children=[
+                            dcc.Graph(
+                                id="correlation-heatmap-graph", 
+                                figure=make_correlation_heatmap_figure(),
+                                style={"height": "600px", "width": "100%"},
+                                config=GRAPH_CONFIG,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+            html.Div(
+                style={"flex": "1"},
+                children=[
+                    card(
+                        title="Bond Duration Risk Analysis",
+                        children=[
+                            dcc.Graph(
+                                id="bond-duration-risk-graph",
+                                figure=make_bond_duration_risk_figure(),
+                                style={"height": "600px", "width": "100%"},
+                                config=GRAPH_CONFIG,
+                            ),
+                        ],
+                    )
+                ],
+            ),
+        ],
+    )
+
+    return html.Div(
+        style={"display": "flex", "flexDirection": "column", "gap": "18px"},
+        children=[
+            html.Div(
+                "Advanced risk management & analytics",
+                style={
+                    "color": THEME["muted"],
+                    "marginBottom": "4px",
+                    "fontSize": "14px",
+                },
+            ),
+            math_block,
+            row1,
+            row2,
+        ],
+    )
+
+
 # ---------- Root layout and index_string ----------
 
 def create_root_layout():
@@ -1289,6 +1508,12 @@ def create_root_layout():
                     dcc.Tab(
                         label="Bond analysis",
                         value="tab-bonds",
+                        className="custom-tab",
+                        selected_className="custom-tab--selected",
+                    ),
+                    dcc.Tab(
+                        label="Risk Management",
+                        value="tab-risk",
                         className="custom-tab",
                         selected_className="custom-tab--selected",
                     ),

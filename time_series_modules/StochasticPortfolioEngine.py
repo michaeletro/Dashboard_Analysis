@@ -1206,8 +1206,15 @@ class StochasticPortfolioEngine:
         if delta <= 0:
             raise ValueError("Delta is non positive, covariance may be singular.")
 
-        r_min = float(mu.min())
-        r_max = float(mu.max())
+        # Compute minimum variance portfolio return for better frontier range
+        # Global minimum variance portfolio: w_mvp = Σ^(-1)·1 / (1^T·Σ^(-1)·1)
+        w_mvp = Sigma_inv @ ones / A
+        r_mvp = float(w_mvp @ mu)
+        
+        # Use a more comprehensive range for the frontier
+        # Start from minimum variance return, extend beyond max individual asset return
+        r_min = min(r_mvp, float(mu.min()))
+        r_max = max(float(mu.max()), r_mvp + 1.5 * (float(mu.max()) - r_mvp))
         target_returns = np.linspace(r_min, r_max, n_points)
 
         weights = np.zeros((n_points, self.n_assets))
