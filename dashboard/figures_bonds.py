@@ -302,9 +302,11 @@ def make_credit_analysis_figure() -> go.Figure:
     )
     
     # Rating distribution
-    if not credit_analysis['rating_distribution'].empty:
-        ratings = credit_analysis['rating_distribution'].index
-        counts = credit_analysis['rating_distribution'].values
+    if (credit_analysis and 'rating_distribution' in credit_analysis and 
+        not credit_analysis['rating_distribution'].empty):
+        rating_df = credit_analysis['rating_distribution']
+        ratings = rating_df.index
+        counts = rating_df['Count'].values if 'Count' in rating_df.columns else rating_df.values.flatten()
         
         fig.add_trace(
             go.Bar(
@@ -316,56 +318,118 @@ def make_credit_analysis_figure() -> go.Figure:
             ),
             row=1, col=1
         )
+    else:
+        # Fallback: compute rating distribution directly from df_bonds
+        if 'Rating' in df_bonds.columns and not df_bonds['Rating'].isna().all():
+            rating_counts = df_bonds['Rating'].value_counts().sort_index()
+            fig.add_trace(
+                go.Bar(
+                    x=rating_counts.index,
+                    y=rating_counts.values,
+                    marker=dict(color=THEME['accent2']),
+                    name='Rating Count',
+                    showlegend=False
+                ),
+                row=1, col=1
+            )
+        else:
+            # Show "No Data" message
+            fig.add_annotation(
+                x=0.25, y=0.75, xref="paper", yref="paper",
+                text="No Rating Data", showarrow=False,
+                font=dict(size=14, color=THEME['text_color'])
+            )
     
     # Sector pie chart
-    sector_weights = df_bonds.groupby('Sector')['Weight'].sum()
-    fig.add_trace(
-        go.Pie(
-            labels=sector_weights.index,
-            values=sector_weights.values,
-            name='Sector Weight',
-            showlegend=False
-        ),
-        row=1, col=2
-    )
+    if 'Sector' in df_bonds.columns and not df_bonds['Sector'].isna().all():
+        if 'Weight' in df_bonds.columns:
+            sector_weights = df_bonds.groupby('Sector')['Weight'].sum()
+        else:
+            # Equal weighting if no Weight column
+            sector_counts = df_bonds['Sector'].value_counts()
+            sector_weights = sector_counts / sector_counts.sum()
+        
+        fig.add_trace(
+            go.Pie(
+                labels=sector_weights.index,
+                values=sector_weights.values,
+                name='Sector Weight',
+                showlegend=False
+            ),
+            row=1, col=2
+        )
+    else:
+        # Show "No Data" message for sector
+        fig.add_annotation(
+            x=0.75, y=0.75, xref="paper", yref="paper",
+            text="No Sector Data", showarrow=False,
+            font=dict(size=14, color=THEME['text_color'])
+        )
     
     # Credit spreads by rating
-    spread_by_rating = df_bonds.groupby('Rating')['Credit_Spread'].mean() * 10000  # Convert to bps
-    fig.add_trace(
-        go.Bar(
-            x=spread_by_rating.index,
-            y=spread_by_rating.values,
-            marker=dict(color=THEME['accent']),
-            name='Avg Spread (bps)',
-            showlegend=False
-        ),
-        row=2, col=1
-    )
+    if ('Rating' in df_bonds.columns and 'Credit_Spread' in df_bonds.columns and 
+        not df_bonds['Rating'].isna().all() and not df_bonds['Credit_Spread'].isna().all()):
+        spread_by_rating = df_bonds.groupby('Rating')['Credit_Spread'].mean() * 10000  # Convert to bps
+        fig.add_trace(
+            go.Bar(
+                x=spread_by_rating.index,
+                y=spread_by_rating.values,
+                marker=dict(color=THEME['accent']),
+                name='Avg Spread (bps)',
+                showlegend=False
+            ),
+            row=2, col=1
+        )
+    else:
+        # Show "No Data" message
+        fig.add_annotation(
+            x=0.25, y=0.25, xref="paper", yref="paper",
+            text="No Credit Spread Data", showarrow=False,
+            font=dict(size=14, color=THEME['text_color'])
+        )
     
     # Yield vs Credit Spread
-    fig.add_trace(
-        go.Scatter(
-            x=df_bonds['Credit_Spread'] * 10000,  # bps
-            y=df_bonds['Yield'] * 100,  # percentage
-            mode='markers',
-            marker=dict(
-                size=8,
-                color=df_bonds['Duration'],
-                colorscale='Viridis',
-                showscale=False
+    if ('Credit_Spread' in df_bonds.columns and 'Yield' in df_bonds.columns and
+        not df_bonds['Credit_Spread'].isna().all() and not df_bonds['Yield'].isna().all()):
+        
+        # Use Duration for color if available, otherwise use index
+        if 'Duration' in df_bonds.columns and not df_bonds['Duration'].isna().all():
+            color_values = df_bonds['Duration']
+            color_title = 'Duration'
+        else:
+            color_values = df_bonds.index
+            color_title = 'Bond Index'
+            
+        fig.add_trace(
+            go.Scatter(
+                x=df_bonds['Credit_Spread'] * 10000,  # bps
+                y=df_bonds['Yield'] * 100,  # percentage
+                mode='markers',
+                marker=dict(
+                    size=8,
+                    color=color_values,
+                    colorscale='Viridis',
+                    showscale=False
+                ),
+                text=df_bonds.get('Rating', 'N/A'),
+                hovertemplate=(
+                    'Credit Spread: %{x:.0f}bps<br>'
+                    'Yield: %{y:.2f}%<br>'
+                    f'{color_title}: %{{marker.color:.2f}}<br>'
+                    'Rating: %{text}<extra></extra>'
+                ),
+                name='Bonds',
+                showlegend=False
             ),
-            text=df_bonds['Rating'],
-            hovertemplate=(
-                'Credit Spread: %{x:.0f}bps<br>'
-                'Yield: %{y:.2f}%<br>'
-                'Duration: %{marker.color:.2f}<br>'
-                'Rating: %{text}<extra></extra>'
-            ),
-            name='Bonds',
-            showlegend=False
-        ),
-        row=2, col=2
-    )
+            row=2, col=2
+        )
+    else:
+        # Show "No Data" message
+        fig.add_annotation(
+            x=0.75, y=0.25, xref="paper", yref="paper",
+            text="No Yield/Spread Data", showarrow=False,
+            font=dict(size=14, color=THEME['text_color'])
+        )
     
     # Update subplot axes
     fig.update_xaxes(title_text='Rating', row=1, col=1)
