@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 from .config import THEME, style_figure
-from .data import engine, w_tan, w_bl
+from . import data
 
 
 def make_frontier_figure(n_points: int, show_tangency: bool) -> go.Figure:
@@ -12,6 +12,8 @@ def make_frontier_figure(n_points: int, show_tangency: bool) -> go.Figure:
     Efficient frontier in annualised space, with optional tangency point.
     Uses the engine annualised mean and covariance for consistency.
     """
+    data.ensure_data_loaded()
+    engine = data.engine
     # frontier in annualised space
     r, vol, _ = engine.efficient_frontier(n_points=n_points, annualised=True)
 
@@ -106,6 +108,8 @@ def make_paths_figure(
     Simulated forward portfolio paths starting from current prices,
     normalised so that t = 0 is roughly 1 for all paths.
     """
+    data.ensure_data_loaded()
+    engine = data.engine
     # choose weights
     if use_tangency:
         if engine.w_tangency_ is None:
@@ -185,6 +189,9 @@ def make_tangency_levels_figure(
       - realised historical path
       - horizon return distribution
     """
+    data.ensure_data_loaded()
+    engine = data.engine
+    w_tan = data.w_tan
     # realised tangency path in level terms
     real_path_level = engine.historical_portfolio_path(w_tan, normalise=False)
     base_level = float(real_path_level[0])
@@ -252,6 +259,10 @@ def make_portfolio_paths_3d_figure(
     Three dimensional view of simulated portfolio paths, using the same engine
     simulation logic (normalised paths).
     """
+    data.ensure_data_loaded()
+    engine = data.engine
+    w_tan = data.w_tan
+    w_bl = data.w_bl
     if port_type == "tangency":
         w = w_tan
         title_prefix = "Tangency"

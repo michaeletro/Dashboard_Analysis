@@ -33,15 +33,13 @@ from .data import (
     mape_mom,
     r2_all,
     r2_mom,
-    peer_analyzer,
-    peer_analyzer_fig,
 )
 from .figures_cross_section import (
-    cluster_fig,
-    regression_fig,
-    peer_sector_fig,
-    coef_tstat_bar_fig,
-    tstat_dist_fig,
+    get_cluster_fig,
+    make_regression_figure,
+    make_peer_sector_figure,
+    make_regression_bar_figure,
+    make_tstat_distribution_figure,
 )
 from .figures_portfolio import (
     make_frontier_figure,
@@ -858,7 +856,7 @@ def layout_tab_other():
                             ),
                             dcc.Graph(
                                 id="cluster-3d-graph",
-                                figure=cluster_fig,
+                                figure=get_cluster_fig(),
                                 config=GRAPH_CONFIG,
                                 style={
                                     "flex": "1 1 auto",
@@ -878,7 +876,7 @@ def layout_tab_other():
                         children=[
                             dcc.Graph(
                                 id="regression-graph",
-                                figure=regression_fig,
+                                figure=make_regression_figure(),
                                 style={
                                     "flex": "1 1 auto",
                                     "height": "100%",
@@ -905,7 +903,7 @@ def layout_tab_other():
                         children=[
                             dcc.Graph(
                                 id="peer-sector-graph",
-                                figure=peer_analyzer_fig,
+                                figure=make_peer_sector_figure(),
                                 style={"height": "430px", "width": "100%"},
                                 config=GRAPH_CONFIG,
                             ),
@@ -953,7 +951,7 @@ def layout_tab_other():
                                 children=[
                                     dcc.Graph(
                                         id="coef-tstat-bar-graph",
-                                        figure=coef_tstat_bar_fig,
+                                        figure=make_regression_bar_figure(),
                                         style={"height": "420px", "width": "100%"},
                                         config=GRAPH_CONFIG,
                                     ),
@@ -978,7 +976,7 @@ def layout_tab_other():
                         children=[
                             dcc.Graph(
                                 id="tstat-dist-graph",
-                                figure=tstat_dist_fig,
+                                figure=make_tstat_distribution_figure(),
                                 style={"height": "420px", "width": "100%"},
                                 config=GRAPH_CONFIG,
                             ),

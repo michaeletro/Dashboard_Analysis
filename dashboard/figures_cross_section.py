@@ -6,23 +6,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 from .config import THEME, style_figure
-from .data import (
-    df_equity,
-    clusterer,
-    cluster_metrics,
-    sector_summary,
-    y_actual,
-    y_hat_all,
-    y_hat_m,
-    nmise_all,
-    mape_all,
-    nmise_mom,
-    mape_mom,
-    r2_all,
-    r2_mom,
-    engine,       # not used now but kept for future if needed
-    results_all,
-)
+from . import data
 
 
 def make_cluster_placeholder(msg: str) -> go.Figure:
@@ -39,31 +23,42 @@ def make_cluster_placeholder(msg: str) -> go.Figure:
     return style_figure(fig, height=420, title="Factor clustering (3D PCA space)")
 
 
-# cluster figure from clusterer
-raw_cluster_fig = clusterer.plot_clusters_3d(df_equity, show_plot=False)
+def get_cluster_fig() -> go.Figure:
+    data.ensure_data_loaded()
+    df_equity = data.df_equity
+    clusterer = data.clusterer
+    raw_cluster_fig = clusterer.plot_clusters_3d(df_equity, show_plot=False)
 
-if raw_cluster_fig is None:
-    factor_score_cols = [c for c in df_equity.columns if str(c).endswith("Score")]
-    if len(factor_score_cols) < 3:
-        msg = (
-            "Cannot build 3D PCA cluster plot. "
-            "Need at least three factor columns ending with 'Score'. "
-            f"Found: {', '.join(factor_score_cols) or 'none'}"
-        )
+    if raw_cluster_fig is None:
+        factor_score_cols = [c for c in df_equity.columns if str(c).endswith("Score")]
+        if len(factor_score_cols) < 3:
+            msg = (
+                "Cannot build 3D PCA cluster plot. "
+                "Need at least three factor columns ending with 'Score'. "
+                f"Found: {', '.join(factor_score_cols) or 'none'}"
+            )
+        else:
+            msg = (
+                "3D cluster figure unavailable. "
+                "Check that scikit learn and plotly are installed "
+                "and that FactorClusterer.fit_predict ran successfully."
+            )
+        return make_cluster_placeholder(msg)
     else:
-        msg = (
-            "3D cluster figure unavailable. "
-            "Check that scikit learn and plotly are installed "
-            "and that FactorClusterer.fit_predict ran successfully."
-        )
-    cluster_fig = make_cluster_placeholder(msg)
-else:
-    # do not change layout height here, let Dash control
-    raw_cluster_fig.update_layout(margin=dict(l=0, r=0, b=0, t=40))
-    cluster_fig = raw_cluster_fig
+        raw_cluster_fig.update_layout(margin=dict(l=0, r=0, b=0, t=40))
+        return raw_cluster_fig
 
 
 def make_regression_figure() -> go.Figure:
+    data.ensure_data_loaded()
+    df_equity = data.df_equity
+    y_actual = data.y_actual
+    y_hat_all = data.y_hat_all
+    y_hat_m = data.y_hat_m
+    nmise_all = data.nmise_all
+    mape_all = data.mape_all
+    nmise_mom = data.nmise_mom
+    mape_mom = data.mape_mom
     x_axis = df_equity.index if df_equity.index.is_unique else np.arange(len(df_equity))
 
     fig = go.Figure()
@@ -116,10 +111,14 @@ def make_regression_figure() -> go.Figure:
     return fig
 
 
-regression_fig = make_regression_figure()
+ # compute on demand via function above
 
 
 def make_peer_sector_figure() -> go.Figure:
+    data.ensure_data_loaded()
+    sector_summary = data.sector_summary
+    if sector_summary is None:
+        return make_cluster_placeholder("No sector summary available")
     if "Sector" in sector_summary.columns:
         sectors = sector_summary["Sector"].values
         numeric_cols = sector_summary.select_dtypes(include=[np.number]).columns
@@ -152,7 +151,7 @@ def make_peer_sector_figure() -> go.Figure:
     return fig
 
 
-peer_sector_fig = make_peer_sector_figure()
+ # compute on demand via function above
 
 
 def make_regression_bar_figure() -> go.Figure:
@@ -160,7 +159,8 @@ def make_regression_bar_figure() -> go.Figure:
     Bar chart of regression coefficients and t statistics
     from the results_all dataframe.
     """
-    df = results_all.copy()
+    data.ensure_data_loaded()
+    df = data.results_all.copy()
 
     if "Factor" in df.columns:
         factors = df["Factor"].astype(str).values
@@ -202,7 +202,7 @@ def make_regression_bar_figure() -> go.Figure:
     return fig
 
 
-coef_tstat_bar_fig = make_regression_bar_figure()
+ # compute on demand via function above
 
 
 def normal_pdf(x: np.ndarray) -> np.ndarray:
@@ -217,7 +217,8 @@ def make_tstat_distribution_figure() -> go.Figure:
     Plot standard normal density and mark each regression t statistic
     as a vertical line with its two sided p value.
     """
-    df = results_all.copy()
+    data.ensure_data_loaded()
+    df = data.results_all.copy()
 
     # factor labels
     if "Factor" in df.columns:
@@ -326,5 +327,3 @@ def make_tstat_distribution_figure() -> go.Figure:
         ),
     )
     return fig
-
-tstat_dist_fig = make_tstat_distribution_figure()
