@@ -48,7 +48,14 @@ SIM_MAXPATHS_DEFAULT = int(_env("SIM_MAXPATHS_DEFAULT", "50"))
 
 GRAPH_CONFIG = {
     "displaylogo": False,
-    "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+    "modeBarButtonsToRemove": ["lasso2d", "select2d", "pan2d", "autoScale2d", "resetScale2d"],
+    "toImageButtonOptions": {
+        "format": "png",
+        "filename": "bloomberg_chart",
+        "height": 800,
+        "width": 1200,
+        "scale": 2,
+    },
 }
 
 CARD_PADDING = _env("CARD_PADDING", "16px 18px")

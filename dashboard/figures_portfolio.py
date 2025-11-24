@@ -347,7 +347,11 @@ def make_portfolio_paths_3d_figure(
     fig.update_layout(
         title=dict(
             text=f"{title_prefix} portfolio value paths 3D",
-            font=dict(size=16, color=THEME["accent"]),
+            font=dict(size=14, color=THEME["accent"]),
+            x=0.5,  # Center the title
+            y=0.98,  # Position near top but with space
+            xanchor='center',
+            yanchor='top'
         ),
         scene=dict(
             xaxis=dict(
@@ -372,18 +376,25 @@ def make_portfolio_paths_3d_figure(
                 color=THEME["muted"],
             ),
             bgcolor=THEME["card"],
+            camera=dict(
+                eye=dict(x=1.5, y=1.5, z=1.2)  # Better default viewing angle
+            )
         ),
-        margin=dict(l=0, r=0, b=0, t=40),
-        height=430,
+        margin=dict(l=10, r=10, b=10, t=60),  # Increased top margin for title
+        height=480,  # Slightly increased height to accommodate title
         paper_bgcolor=THEME["card"],
         font=dict(color=THEME["text"]),
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
+            y=0.02,  # Position legend at bottom
             xanchor="left",
             x=0,
+            bgcolor="rgba(0, 0, 0, 0.7)",
+            bordercolor=THEME["border"],
+            borderwidth=1
         ),
+        showlegend=True,
     )
 
     return fig

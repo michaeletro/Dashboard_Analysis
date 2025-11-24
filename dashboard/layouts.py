@@ -117,7 +117,7 @@ $$
 $$
 Frontier solves
 $$
-\min_w \; w^{\top} \Sigma w \quad \text{s.t.} \quad w^{\top} \mu = \mu^\*,\; \mathbf{1}^{\top} w = 1.
+\min_w \; w^{\top} \Sigma w \quad \text{s.t.} \quad w^{\top} \mu = \mu^*,\; \mathbf{1}^{\top} w = 1.
 $$
 
 ### Portfolio Construction Methods
@@ -346,6 +346,70 @@ $$
 $$
 """
 
+individual_dataset_risk_math_md = r"""
+**Individual Dataset Risk Analysis Mathematics**
+
+### Equity Dataset: Cross-Sectional Return Analysis
+
+**Cross-sectional return distribution**: For $N$ stocks at time $t$:
+$$
+R_{i,t} \sim \text{Distribution}(\mu_t, \sigma_t^2)
+$$
+
+**Cross-sectional moments**:
+- Mean return: $\bar{R}_t = \frac{1}{N} \sum_{i=1}^N R_{i,t}$
+- Cross-sectional volatility: $\sigma_{cs,t} = \sqrt{\frac{1}{N-1} \sum_{i=1}^N (R_{i,t} - \bar{R}_t)^2}$
+- Percentiles: $P_\alpha = F^{-1}(\alpha)$ where $F$ is empirical CDF
+
+**Factor Score Analysis**: Average factor exposures across universe:
+$$
+\bar{\beta}_k = \frac{1}{N} \sum_{i=1}^N \beta_{i,k}
+$$
+
+Standard deviation of factor scores:
+$$
+\sigma_{\beta_k} = \sqrt{\frac{1}{N-1} \sum_{i=1}^N (\beta_{i,k} - \bar{\beta}_k)^2}
+$$
+
+### Bond Dataset: Duration Risk Distribution
+
+**Modified duration distribution**: For bond portfolio components:
+$$
+D_{\text{mod},i} = \frac{1}{P_i} \frac{\partial P_i}{\partial y}
+$$
+
+**Duration statistics across bonds**:
+- Average duration: $\bar{D} = \frac{1}{M} \sum_{i=1}^M D_i$
+- Duration volatility: $\sigma_D = \sqrt{\frac{1}{M-1} \sum_{i=1}^M (D_i - \bar{D})^2}$
+
+**Interest rate sensitivity**: Price change for parallel yield shift:
+$$
+\frac{\Delta P_i}{P_i} \approx -D_{\text{mod},i} \Delta y + \frac{1}{2} C_i (\Delta y)^2
+$$
+
+where $C_i$ is convexity.
+
+### Time Series Dataset: Individual Asset Volatility
+
+**Rolling volatility estimation** for asset $i$:
+$$
+\hat{\sigma}_{i,t} = \sqrt{\frac{252}{T} \sum_{s=t-T+1}^t (r_{i,s} - \bar{r}_{i,t})^2}
+$$
+
+**Cross-asset volatility statistics**:
+- Mean volatility: $\bar{\sigma} = \frac{1}{K} \sum_{i=1}^K \sigma_i$  
+- Volatility dispersion: $\sigma_{\sigma} = \sqrt{\frac{1}{K-1} \sum_{i=1}^K (\sigma_i - \bar{\sigma})^2}$
+
+**Risk ranking**: Assets sorted by $\sigma_i$ to identify highest/lowest risk
+
+### Key Distinctions from Portfolio Analysis
+
+❌ **NOT calculated**: Portfolio-level VaR, unified correlation matrix, aggregate factor exposures
+✅ **Calculated**: Individual asset/security risk characteristics, cross-sectional distributions, dataset-specific risk metrics
+
+Each dataset represents independent analytical universe requiring separate risk assessment methodologies.
+"""
+
 cross_section_math_md = r"""
 **Underlying mathematics**
 
@@ -473,7 +537,7 @@ Smaller values indicate better cross sectional fit. The application reports thes
 
 Within each sector $s$, for a valuation ratio $M_i$ (for example price over earnings or enterprise value over EBITDA) we compute a sector reference statistic, typically the median $M^{\text{sector}}_s$. For stock $i$ in sector $s$,
 $$
-\text{Valuation\_vs\_Peers}_i
+\text{Valuation_vs_Peers}_i
 =
 \frac{M_i − M^{\text{sector}}_s}{M^{\text{sector}}_s}.
 $$
@@ -488,15 +552,38 @@ since extreme valuation outliers often align with strong value or growth factor 
 # ---------- Shared card helper ----------
 
 def card(children, title=None):
+    """Bloomberg-style card component with terminal aesthetics."""
     header = (
         html.Div(
-            title,
             style={
-                "color": THEME["accent"],
-                "fontWeight": "bold",
-                "marginBottom": "6px",
-                "fontSize": "15px",
+                "borderBottom": f"1px solid {THEME['border']}",
+                "paddingBottom": "10px",
+                "marginBottom": "16px",
+                "background": f"linear-gradient(90deg, transparent, {THEME['accent']}22, transparent)",
+                "position": "relative"
             },
+            children=[
+                html.Div(
+                    title,
+                    style={
+                        "color": THEME["accent"],
+                        "fontWeight": "700",
+                        "fontSize": "13px",
+                        "textTransform": "uppercase",
+                        "letterSpacing": "0.8px",
+                        "fontFamily": "'Bloomberg', monospace"
+                    },
+                ),
+                # Accent underline
+                html.Div(style={
+                    "position": "absolute",
+                    "bottom": "0",
+                    "left": "0",
+                    "width": "40px",
+                    "height": "2px",
+                    "background": f"linear-gradient(90deg, {THEME['accent']}, {THEME['accent2']})"
+                })
+            ]
         )
         if title
         else None
@@ -515,14 +602,29 @@ def card(children, title=None):
         style={
             "backgroundColor": THEME["card"],
             "border": f"1px solid {THEME['border']}",
-            "borderRadius": "4px",
+            "borderRadius": "6px",
             "padding": _settings["CARD"]["padding"],
             "minHeight": _settings["CARD"]["min_height"],
-            "boxShadow": "0 0 10px rgba(0, 0, 0, 0.6)",
+            "boxShadow": "0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
+            "background": f"linear-gradient(135deg, {THEME['card']}, #1a1a1a)",
             "display": "flex",
             "flexDirection": "column",
+            "position": "relative",
+            "overflow": "hidden"
         },
-        children=flat_children,
+        children=[
+            *flat_children,
+            # Bloomberg corner accent
+            html.Div(style={
+                "position": "absolute",
+                "top": "0",
+                "right": "0",
+                "width": "2px",
+                "height": "100%",
+                "background": f"linear-gradient(180deg, {THEME['accent']}, {THEME['accent2']})",
+                "opacity": "0.6"
+            })
+        ]
     )
 
 
@@ -1269,12 +1371,12 @@ def layout_tab_bonds():
 
 
 def layout_tab_risk():
-    """Risk management tab with advanced risk analytics."""
+    """Individual dataset risk analysis tab (CORRECTED - not unified portfolio)."""
     # Math explainer at top
     math_block = card(
-        title="Risk Management Mathematics",
+        title="Individual Dataset Risk Analysis Mathematics",
         children=dcc.Markdown(
-            risk_math_md,
+            individual_dataset_risk_math_md,
             mathjax=True,
             style={
                 "fontSize": "12px",
@@ -1284,7 +1386,7 @@ def layout_tab_risk():
         ),
     )
 
-    # Row 1: Main risk dashboard
+    # Row 1: Main risk dashboard for individual datasets
     row1 = html.Div(
         style={"display": "flex", "gap": "24px"},
         children=[
@@ -1292,7 +1394,7 @@ def layout_tab_risk():
                 style={"flex": "1"},
                 children=[
                     card(
-                        title="Portfolio Risk Dashboard",
+                        title="Individual Dataset Risk Analysis (Not Unified Portfolio)",
                         children=[
                             dcc.Graph(
                                 id="risk-dashboard-graph",
@@ -1350,7 +1452,7 @@ def layout_tab_risk():
         style={"display": "flex", "flexDirection": "column", "gap": "18px"},
         children=[
             html.Div(
-                "Advanced risk management & analytics",
+                "Individual dataset risk analysis (equity, bonds, time series analyzed separately)",
                 style={
                     "color": THEME["muted"],
                     "marginBottom": "4px",
@@ -1363,6 +1465,96 @@ def layout_tab_risk():
         ],
     )
 
+
+# Bloomberg loading and error components
+def bloomberg_loading_overlay() -> html.Div:
+    """Bloomberg-style loading overlay."""
+    return html.Div(
+        id="bloomberg-loading",
+        className="bloomberg-loading",
+        style={"display": "none"},
+        children=[
+            html.Div(className="bloomberg-spinner"),
+            html.P("LOADING ANALYTICS...", style={
+                "color": THEME["accent"],
+                "fontSize": "12px",
+                "fontWeight": "bold",
+                "margin": "0",
+                "letterSpacing": "1px"
+            })
+        ]
+    )
+
+def bloomberg_error_modal() -> html.Div:
+    """Bloomberg-style error modal."""
+    return html.Div(
+        id="error-modal",
+        style={"display": "none"},
+        children=[
+            html.Div(
+                style={
+                    "position": "fixed",
+                    "top": "0",
+                    "left": "0",
+                    "width": "100%",
+                    "height": "100%",
+                    "backgroundColor": "rgba(0, 0, 0, 0.8)",
+                    "zIndex": "9999",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "center"
+                },
+                children=[
+                    html.Div(
+                        style={
+                            "backgroundColor": THEME["card"],
+                            "border": f"2px solid #ff4444",
+                            "borderRadius": "8px",
+                            "padding": "30px",
+                            "maxWidth": "500px",
+                            "textAlign": "center"
+                        },
+                        children=[
+                            html.H3("⚠️ SYSTEM ERROR", style={
+                                "color": "#ff4444",
+                                "fontSize": "16px",
+                                "marginBottom": "15px"
+                            }),
+                            html.P(id="error-message", style={
+                                "color": THEME["text"],
+                                "fontSize": "12px"
+                            }),
+                            html.Button("DISMISS", 
+                                       id="error-dismiss",
+                                       style={
+                                           "backgroundColor": THEME["accent"],
+                                           "color": "#000",
+                                           "border": "none",
+                                           "padding": "8px 16px",
+                                           "borderRadius": "4px",
+                                           "fontSize": "11px",
+                                           "fontWeight": "bold",
+                                           "cursor": "pointer"
+                                       })
+                        ]
+                    )
+                ]
+            )
+        ]
+    )
+
+def bloomberg_shortcuts_help() -> html.Div:
+    """Bloomberg-style keyboard shortcuts help."""
+    return html.Div(
+        className="bloomberg-shortcut",
+        children=[
+            html.P("HOTKEYS: F1-Portfolio | F2-Equity | F3-Bonds | F4-Risk", style={
+                "margin": "0",
+                "color": THEME["text"],
+                "fontSize": "9px"
+            })
+        ]
+    )
 
 # ---------- Root layout and index_string ----------
 
@@ -1424,6 +1616,7 @@ def create_root_layout():
             "width": "100vw",
             "height": "100vh",
             "boxSizing": "border-box",
+            "paddingBottom": "35px",  # Add padding to avoid overlap with status bar
             "display": "flex",
             "flexDirection": "column",
         },
@@ -1477,48 +1670,106 @@ def create_root_layout():
                 ],
             ),
             settings_panel,
+            # Bloomberg-style header section
             html.Div(
-                "Bloomberg themed analytics",
                 style={
-                    "fontSize": "12px",
-                    "color": THEME["muted"],
-                    "marginBottom": "12px",
-                    "width": "100%",
-                    "borderBottom": f"1px solid {THEME['border']}",
+                    "background": f"linear-gradient(135deg, {THEME['card']}, {THEME['panel']})",
+                    "border": f"1px solid {THEME['border']}",
+                    "borderRadius": "6px",
+                    "padding": "16px 20px",
+                    "marginBottom": "20px",
+                    "boxShadow": f"0 2px 10px rgba(248, 231, 28, 0.1)"
                 },
+                children=[
+                    html.Div(
+                        style={"display": "flex", "alignItems": "center", "justifyContent": "space-between"},
+                        children=[
+                            html.Div([
+                                html.H2(
+                                    "📈 BLOOMBERG TERMINAL",
+                                    style={
+                                        "color": THEME["accent"],
+                                        "fontSize": "20px",
+                                        "fontWeight": "700",
+                                        "letterSpacing": "1.2px",
+                                        "margin": "0",
+                                        "fontFamily": "'Bloomberg', monospace",
+                                        "textShadow": f"0 0 20px {THEME['accent']}, 0 0 40px {THEME['accent']}",
+                                        "animation": "terminal-flicker 3s infinite"
+                                    }
+                                ),
+                                html.P(
+                                    "Professional Analytics & Portfolio Management Suite",
+                                    style={
+                                        "color": THEME["text"],
+                                        "fontSize": "12px",
+                                        "margin": "4px 0 0 0",
+                                        "textTransform": "uppercase",
+                                        "letterSpacing": "0.5px"
+                                    }
+                                )
+                            ]),
+                            html.Div([
+                                html.Div(
+                                    "●",
+                                    style={
+                                        "color": THEME["accent2"],
+                                        "fontSize": "14px",
+                                        "marginRight": "8px",
+                                        "display": "inline-block"
+                                    }
+                                ),
+                                html.Span(
+                                    "LIVE",
+                                    style={
+                                        "color": THEME["accent2"],
+                                        "fontSize": "11px",
+                                        "fontWeight": "700",
+                                        "letterSpacing": "1px"
+                                    }
+                                )
+                            ], style={"display": "flex", "alignItems": "center"})
+                        ]
+                    )
+                ]
             ),
             dcc.Tabs(
                 id="tabs",
                 value="tab-portfolio",
                 parent_className="custom-tabs",
                 className="custom-tabs-container",
+                style={
+                    "backgroundColor": THEME["bg"],
+                    "border": "none",
+                    "borderRadius": "8px 8px 0 0",
+                    "overflow": "hidden"
+                },
                 children=[
                     dcc.Tab(
-                        label="Portfolio optimisation",
+                        label="📊 PORTFOLIO OPTIMIZATION",
                         value="tab-portfolio",
                         className="custom-tab",
                         selected_className="custom-tab--selected",
                     ),
                     dcc.Tab(
-                        label="EQ Dataframe analysis",
+                        label="📈 EQUITY ANALYTICS",
                         value="tab-other",
                         className="custom-tab",
                         selected_className="custom-tab--selected",
                     ),
                     dcc.Tab(
-                        label="Bond analysis",
+                        label="🏦 FIXED INCOME",
                         value="tab-bonds",
                         className="custom-tab",
                         selected_className="custom-tab--selected",
                     ),
                     dcc.Tab(
-                        label="Risk Management",
+                        label="⚠️ RISK ANALYTICS",
                         value="tab-risk",
                         className="custom-tab",
                         selected_className="custom-tab--selected",
                     ),
-                ],
-                style={"borderBottom": f"1px solid {THEME['border']}", "marginBottom": "12px", "backgroundColor": THEME["bg"]},
+                ]
             ),
             html.Div(
                 id="tabs-content",
@@ -1528,7 +1779,57 @@ def create_root_layout():
                     "overflowY": "auto",
                 },
             ),
-        ],
+            # Bloomberg enhancement components
+            bloomberg_loading_overlay(),
+            bloomberg_error_modal(),
+            bloomberg_shortcuts_help(),
+            # Bloomberg-style status bar
+            html.Div(
+                style={
+                    "position": "fixed",
+                    "bottom": "0",
+                    "left": "0",
+                    "right": "0",
+                    "height": "28px",
+                    "backgroundColor": THEME["panel"],
+                    "borderTop": f"1px solid {THEME['border']}",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "justifyContent": "space-between",
+                    "padding": "0 16px",
+                    "zIndex": "1000",
+                    "fontSize": "11px",
+                    "fontFamily": "'Bloomberg', monospace"
+                },
+                children=[
+                    html.Div([
+                        html.Span("BLOOMBERG TERMINAL", style={"color": THEME["accent"], "fontWeight": "bold", "marginRight": "12px"}),
+                        html.Span("●", style={"color": "#00ff00", "marginRight": "4px"}),
+                        html.Span("CONNECTED", style={"color": THEME["text"]}),
+                    ]),
+                    html.Div([
+                        html.Span("MARKET STATUS: ", style={"color": THEME["muted"]}),
+                        html.Span("LIVE", style={
+                            "color": THEME["accent2"], 
+                            "fontWeight": "bold",
+                            "textShadow": f"0 0 10px {THEME['accent2']}",
+                            "animation": "pulse 2s infinite"
+                        }),
+                        html.Span(" | ", style={"color": THEME["muted"], "margin": "0 8px"}),
+                        html.Span("ANALYTICS READY", style={
+                            "color": "#00ff00",
+                            "textShadow": "0 0 8px #00ff00"
+                        }),
+                        html.Span(" | ", style={"color": THEME["muted"], "margin": "0 8px"}),
+                        html.Span("USD/EUR: 1.0842", style={
+                            "color": "#00ff88",
+                            "fontSize": "10px",
+                            "fontFamily": "monospace"
+                        }),
+                    ], style={"display": "flex", "alignItems": "center"})
+                ]
+            ),
+        ]
     )
 
 
@@ -1556,16 +1857,187 @@ index_string = """
         <style>
             .custom-tabs-container {
                 color: """ + THEME["muted"] + """;
+                border-bottom: 1px solid """ + THEME["border"] + """;
+                margin-bottom: 0px;
             }
             .custom-tab {
-                background-color: """ + THEME["bg"] + """;
-                border: 1px solid """ + THEME["border"] + """;
-                padding: 6px 12px;
+                background: linear-gradient(135deg, """ + THEME["bg"] + """, #0a0a0a) !important;
+                border: 1px solid #2a2a2a !important;
+                border-bottom: none !important;
+                padding: 12px 20px !important;
+                margin: 0px 2px !important;
+                border-radius: 6px 6px 0px 0px !important;
+                font-family: 'Bloomberg', 'Arial', sans-serif !important;
+                font-weight: 600 !important;
+                font-size: 13px !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0.8px !important;
+                color: #cccccc !important;
+                transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+                cursor: pointer !important;
+                min-width: 140px !important;
+                text-align: center !important;
+                position: relative !important;
+                box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05) !important;
+            }
+            .custom-tab:hover {
+                background: linear-gradient(135deg, #1a1a1a, """ + THEME["panel"] + """) !important;
+                color: """ + THEME["accent2"] + """ !important;
+                border-color: """ + THEME["accent2"] + """ !important;
+                transform: translateY(-2px) !important;
+                box-shadow: 0 4px 16px rgba(0, 230, 255, 0.25), 0 0 20px rgba(0, 230, 255, 0.1) !important;
+                text-shadow: 0 0 10px rgba(0, 230, 255, 0.5) !important;
             }
             .custom-tab--selected {
-                background-color: """ + THEME["card"] + """;
-                border-bottom: 2px solid """ + THEME["accent"] + """;
-                color: """ + THEME["accent"] + """;
+                background: linear-gradient(135deg, #1e1e1e, """ + THEME["card"] + """) !important;
+                border-color: """ + THEME["accent"] + """ !important;
+                border-bottom: 3px solid """ + THEME["accent"] + """ !important;
+                color: """ + THEME["accent"] + """ !important;
+                font-weight: 700 !important;
+                box-shadow: 0 6px 20px rgba(248, 231, 28, 0.3), 0 0 30px rgba(248, 231, 28, 0.15), inset 0 1px 0 rgba(248, 231, 28, 0.2) !important;
+                transform: translateY(-3px) !important;
+                text-shadow: 0 0 15px rgba(248, 231, 28, 0.6) !important;
+            }
+            .custom-tab--selected:before {
+                content: '';
+                position: absolute !important;
+                bottom: -3px !important;
+                left: 0 !important;
+                right: 0 !important;
+                height: 3px !important;
+                background: linear-gradient(90deg, """ + THEME["accent"] + """, """ + THEME["accent2"] + """) !important;
+                animation: glow 2s ease-in-out infinite alternate !important;
+            }
+            @keyframes glow {
+                from { box-shadow: 0 0 5px """ + THEME["accent"] + """; }
+                to { box-shadow: 0 0 10px """ + THEME["accent"] + """, 0 0 15px """ + THEME["accent2"] + """; }
+            }
+            .custom-tabs-container .tab-content {
+                border: none !important;
+                background-color: """ + THEME["bg"] + """ !important;
+                padding: 0 !important;
+            }
+            /* Bloomberg-style active indicator */
+            .custom-tab--selected:after {
+                content: '●' !important;
+                position: absolute !important;
+                top: 4px !important;
+                right: 8px !important;
+                color: """ + THEME["accent"] + """ !important;
+                font-size: 8px !important;
+                animation: pulse 1.5s ease-in-out infinite !important;
+            }
+            @keyframes pulse {
+                0%, 100% { opacity: 1; transform: scale(1); }
+                50% { opacity: 0.7; transform: scale(1.2); }
+            }
+            @keyframes terminal-flicker {
+                0%, 100% { opacity: 1; }
+                98% { opacity: 1; }
+                99% { opacity: 0.8; }
+            }
+            @keyframes data-flow {
+                0% { transform: translateX(-100%); opacity: 0; }
+                50% { opacity: 1; }
+                100% { transform: translateX(100%); opacity: 0; }
+            }
+            /* Bloomberg terminal-style typography */
+            body {
+                font-family: 'Bloomberg', 'Monaco', 'Menlo', 'Consolas', monospace !important;
+                background-color: """ + THEME["bg"] + """ !important;
+                background-image: 
+                    radial-gradient(circle at 1px 1px, rgba(248, 231, 28, 0.02) 1px, transparent 0);
+                background-size: 20px 20px;
+                animation: terminal-flicker 5s infinite;
+            }
+            /* Bloomberg data table styling */
+            .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner table {
+                border-collapse: separate !important;
+                border-spacing: 1px !important;
+                background-color: """ + THEME["bg"] + """ !important;
+            }
+            .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner th {
+                background-color: """ + THEME["panel"] + """ !important;
+                color: """ + THEME["accent"] + """ !important;
+                font-weight: 700 !important;
+                text-transform: uppercase !important;
+                letter-spacing: 0.5px !important;
+                font-size: 11px !important;
+                border: 1px solid """ + THEME["border"] + """ !important;
+            }
+            .dash-table-container .dash-spreadsheet-container .dash-spreadsheet-inner td {
+                background-color: """ + THEME["card"] + """ !important;
+                color: """ + THEME["text"] + """ !important;
+                border: 1px solid """ + THEME["border"] + """ !important;
+                font-family: 'Bloomberg', monospace !important;
+                font-size: 10px !important;
+            }
+            /* Bloomberg scrollbar styling */
+            ::-webkit-scrollbar {
+                width: 8px;
+                height: 8px;
+            }
+            ::-webkit-scrollbar-track {
+                background: """ + THEME["bg"] + """;
+            }
+            ::-webkit-scrollbar-thumb {
+                background: linear-gradient(""" + THEME["accent"] + """, """ + THEME["accent2"] + """);
+                border-radius: 4px;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                background: linear-gradient(""" + THEME["accent2"] + """, """ + THEME["accent"] + """);
+            }
+            .custom-tab .tab-label {
+                display: flex !important;
+                align-items: center !important;
+                justify-content: center !important;
+                gap: 6px !important;
+            }
+            /* Additional Bloomberg styling */
+            .custom-tabs-container > .tabs-and-content-wrapper {
+                border: none !important;
+                background-color: """ + THEME["bg"] + """ !important;
+            }
+            /* Bloomberg keyboard shortcuts and interactions */
+            .bloomberg-shortcut {
+                position: fixed;
+                bottom: 40px;
+                right: 20px;
+                background: linear-gradient(135deg, """ + THEME["panel"] + """, #2a2a2a);
+                border: 1px solid """ + THEME["accent"] + """;
+                padding: 8px 12px;
+                border-radius: 6px;
+                color: """ + THEME["text"] + """;
+                font-size: 10px;
+                font-family: 'Bloomberg', monospace;
+                z-index: 1001;
+                opacity: 0.8;
+            }
+            .bloomberg-loading {
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: """ + THEME["panel"] + """;
+                border: 2px solid """ + THEME["accent"] + """;
+                padding: 30px;
+                border-radius: 8px;
+                z-index: 9999;
+                text-align: center;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.7);
+            }
+            .bloomberg-spinner {
+                border: 3px solid """ + THEME["border"] + """;
+                border-top: 3px solid """ + THEME["accent"] + """;
+                border-radius: 50%;
+                width: 30px;
+                height: 30px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 10px auto;
+            }
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
             }
         </style>
     </head>
