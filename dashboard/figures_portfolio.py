@@ -1,0 +1,344 @@
+from __future__ import annotations
+
+import numpy as np
+import plotly.graph_objects as go
+
+from .config import THEME, style_figure
+from .data import engine, w_tan, w_bl
+
+
+def make_frontier_figure(n_points: int, show_tangency: bool) -> go.Figure:
+    """
+    Efficient frontier in annualised space, with optional tangency point.
+    Uses the engine annualised mean and covariance for consistency.
+    """
+    # frontier in annualised space
+    r, vol, _ = engine.efficient_frontier(n_points=n_points, annualised=True)
+
+    fig = go.Figure()
+
+    # efficient frontier line
+    fig.add_trace(
+        go.Scatter(
+            x=vol,
+            y=r,
+            mode="lines",
+            name="efficient frontier",
+            line=dict(width=3, color=THEME["accent2"]),
+            hovertemplate="Vol: %{x:.4f}<br>Return: %{y:.4f}<extra></extra>",
+        )
+    )
+
+    # individual assets (annualised)
+    mu_assets = engine.mu_annualised
+    Sigma_assets = engine.Sigma_annualised
+    asset_vols = np.sqrt(np.diag(Sigma_assets))
+
+    fig.add_trace(
+        go.Scatter(
+            x=asset_vols,
+            y=mu_assets,
+            mode="markers+text",
+            name="assets",
+            text=engine.assets,
+            textposition="top center",
+            marker=dict(size=8, color=THEME["muted"]),
+            hovertemplate=(
+                "Asset: %{text}<br>"
+                "Vol: %{x:.4f}<br>"
+                "Return: %{y:.4f}<extra></extra>"
+            ),
+        )
+    )
+
+    # tangency portfolio point
+    if show_tangency:
+        if engine.w_tangency_ is None:
+            engine.tangency_weights()
+
+        w = engine.w_tangency_
+        mu_p, vol_p, _ = engine.portfolio_risk_return(
+            w,
+            annualised=True,
+        )
+
+        fig.add_trace(
+            go.Scatter(
+                x=[vol_p],
+                y=[mu_p],
+                mode="markers",
+                marker=dict(size=11, color=THEME["accent"], symbol="star"),
+                name="tangency",
+                hovertemplate=(
+                    "Tangency portfolio<br>"
+                    "Vol: %{x:.4f}<br>"
+                    "Return: %{y:.4f}<extra></extra>"
+                ),
+            )
+        )
+
+    fig = style_figure(
+        fig,
+        height=430,
+        title="Efficient frontier",
+    )
+    fig.update_layout(
+        xaxis_title="Volatility annual",
+        yaxis_title="Expected return annual",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+        ),
+    )
+    return fig
+
+
+def make_paths_figure(
+    n_steps: int,
+    n_paths: int,
+    use_tangency: bool,
+    max_paths: int,
+) -> go.Figure:
+    """
+    Simulated forward portfolio paths starting from current prices,
+    normalised so that t = 0 is roughly 1 for all paths.
+    """
+    # choose weights
+    if use_tangency:
+        if engine.w_tangency_ is None:
+            engine.tangency_weights()
+        w = engine.w_tangency_
+    else:
+        w = np.ones(engine.n_assets, dtype=float) / engine.n_assets
+
+    # start from last observed prices
+    S0 = engine.level.iloc[-1].values
+
+    # simulate normalised paths
+    V = engine.simulate_portfolio_paths(
+        weights=w,
+        n_steps=n_steps,
+        n_paths=n_paths,
+        S0=S0,
+    )
+
+    n_paths_sim, n_steps_plus_1 = V.shape
+    x_vals = np.arange(n_steps_plus_1)
+
+    fig = go.Figure()
+
+    # subset of paths to plot
+    n_plot = min(n_paths_sim, max_paths)
+    idx = np.linspace(0, n_paths_sim - 1, n_plot, dtype=int)
+
+    for pid in idx:
+        fig.add_trace(
+            go.Scatter(
+                x=x_vals,
+                y=V[pid, :],
+                mode="lines",
+                line=dict(width=1, color="rgba(120, 140, 255, 0.15)"),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
+
+    # mean simulated path
+    mean_path = V.mean(axis=0)
+    fig.add_trace(
+        go.Scatter(
+            x=x_vals,
+            y=mean_path,
+            mode="lines",
+            line=dict(width=3, color=THEME["accent"]),
+            name="mean simulated",
+            hovertemplate="Step: %{x}<br>Value: %{y:.4f}<extra></extra>",
+        )
+    )
+
+    fig = style_figure(
+        fig,
+        height=430,
+        title="Simulated portfolio paths",
+    )
+    fig.update_layout(
+        xaxis_title="Time step",
+        yaxis_title="Portfolio value normalised",
+    )
+    return fig
+
+
+def make_tangency_levels_figure(
+    n_paths: int = 500,
+    max_paths_plot: int = 50,
+) -> go.Figure:
+    """
+    Historical tangency portfolio level versus GBM simulations mapped to level space,
+    rendered using StochasticPortfolioEngine.plot_portfolio_paths_2d so we get:
+
+      - simulated paths
+      - mean path
+      - golden run path
+      - realised historical path
+      - horizon return distribution
+    """
+    # realised tangency path in level terms
+    real_path_level = engine.historical_portfolio_path(w_tan, normalise=False)
+    base_level = float(real_path_level[0])
+
+    # same horizon as history
+    n_steps = len(real_path_level) - 1
+
+    # simulate normalised GBM portfolio paths
+    V_norm = engine.simulate_portfolio_paths(
+        weights=w_tan,
+        n_steps=n_steps,
+        n_paths=n_paths,
+    )
+
+    # map to level units
+    V_level = engine.apply_growth_to_level(V_norm, base_level=base_level)
+
+    time_idx = engine.level.index[: V_level.shape[1]]
+
+    # use the engine 2D plotting method to build the full subplot figure
+    fig = engine.plot_portfolio_paths_2d(
+        V=V_level,
+        time_index=time_idx,
+        max_paths=max_paths_plot,
+        show_mean=True,
+        real_path=real_path_level,
+        real_label="historical level",
+        title="Tangency portfolio simulated vs historical levels",
+        golden_run=True,
+        plot_portfolio=False,     # do not overlay individual asset levels here
+        normalise_at_start=False, # we are already in level space
+        plot_nth_percentile=0.9,
+        show=False,               # critical for Dash: do not call fig.show()
+    )
+
+    # optional: harmonise with the app theme
+    fig.update_layout(
+        paper_bgcolor=THEME["card"],
+        plot_bgcolor=THEME["card"],
+        font=dict(color=THEME["text"]),
+        height=430,
+    )
+
+    # y axis for left panel is portfolio level now
+    fig.update_yaxes(
+        title_text="Portfolio level",
+        row=1,
+        col=1,
+    )
+    # y axis for right panel remains horizon return
+    fig.update_yaxes(
+        title_text="Horizon return",
+        row=1,
+        col=2,
+    )
+
+    return fig
+def make_portfolio_paths_3d_figure(
+    port_type: str,
+    n_steps: int,
+    n_paths: int,
+    max_paths: int,
+) -> go.Figure:
+    """
+    Three dimensional view of simulated portfolio paths, using the same engine
+    simulation logic (normalised paths).
+    """
+    if port_type == "tangency":
+        w = w_tan
+        title_prefix = "Tangency"
+    elif port_type == "black_litterman":
+        if w_bl is None:
+            from .figures_cross_section import make_cluster_placeholder
+
+            return make_cluster_placeholder(
+                "Black Litterman weights unavailable. "
+                "Ensure black_litterman_tangency_weights is implemented."
+            )
+        w = w_bl
+        title_prefix = "Black Litterman"
+    else:
+        # default fallback
+        w = w_tan
+        title_prefix = "Tangency"
+
+    # simulate normalised portfolio paths
+    V = engine.simulate_portfolio_paths(
+        weights=w,
+        n_steps=n_steps,
+        n_paths=n_paths,
+    )
+
+    n_paths_sim, n_steps_plus_1 = V.shape
+    time_idx = engine.returns.index[: n_steps_plus_1]
+
+    fig = go.Figure()
+
+    n_plot = min(n_paths_sim, max_paths)
+    idx = np.linspace(0, n_paths_sim - 1, n_plot, dtype=int)
+
+    for j, pid in enumerate(idx):
+        fig.add_trace(
+            go.Scatter3d(
+                x=time_idx,
+                y=np.full(n_steps_plus_1, pid),
+                z=V[pid, :],
+                mode="lines",
+                line=dict(width=1),
+                opacity=0.55,
+                showlegend=(j == 0),
+                name="simulated paths" if j == 0 else None,
+            )
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=f"{title_prefix} portfolio value paths 3D",
+            font=dict(size=16, color=THEME["accent"]),
+        ),
+        scene=dict(
+            xaxis=dict(
+                title="Time",
+                backgroundcolor=THEME["panel"],
+                gridcolor=THEME["grid"],
+                zeroline=False,
+                color=THEME["muted"],
+            ),
+            yaxis=dict(
+                title="Path id",
+                backgroundcolor=THEME["panel"],
+                gridcolor=THEME["grid"],
+                zeroline=False,
+                color=THEME["muted"],
+            ),
+            zaxis=dict(
+                title="Portfolio value normalised",
+                backgroundcolor=THEME["panel"],
+                gridcolor=THEME["grid"],
+                zeroline=False,
+                color=THEME["muted"],
+            ),
+            bgcolor=THEME["card"],
+        ),
+        margin=dict(l=0, r=0, b=0, t=40),
+        height=430,
+        paper_bgcolor=THEME["card"],
+        font=dict(color=THEME["text"]),
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+        ),
+    )
+
+    return fig
